@@ -1,6 +1,6 @@
 [project]
 name = "code-review"
-version = "1.0.0"
+version = "0.0.1"
 description = "Configurable multi-persona code review CLI"
 readme = "README.md"
 license = { text = "MIT" }
@@ -25,13 +25,15 @@ line-length = 120
 testpaths = ["tests"]
 
 [tool.mutmut]
-source_paths = "src/code_review/review_planner"
+source_paths = ["src/code_review/review_planner"]
 runner = "uv run pytest -q tests"
-pytest_add_cli_args_test_selection = "tests"
+pytest_add_cli_args_test_selection = ["tests"]
 max_stack_depth = 8
 
 [dependency-groups]
 dev = [
+    "mutmut>=3.6.0",
+    "pyrefly>=1.1.1",
     "pytest>=9.1.1",
     "pytest-forked>=1.6.0",
     "pytest-mock>=3.15.1",
