@@ -1,0 +1,10 @@
+{
+  "detected": "2026-07-23",
+  "stacks": ["python"],
+  "frameworks": ["pytest"],
+  "packageManager": "uv",
+  "hasDocker": false,
+  "indicators": {
+    "pyproject.toml": true
+  }
+}

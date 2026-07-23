@@ -1,0 +1,114 @@
+---
+name: pr
+description: >-
+  Run this project's pre-PR quality gate (pytest, ruff, pyrefly, code review)
+  and then create a pull request with a structured summary. Use when the user
+  says "create a PR", "open a PR", "submit for review", or "I'm done with this
+  feature".
+argument-hint: "[--skip-review] [--draft] [--base <branch>]"
+user-invocable: true
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash(git *), Bash(gh *), Bash(uv *), Bash(uvx *), Skill(code-review *)
+---
+
+# Pull Request
+
+Role: orchestrator. This command enforces quality gates before creating a PR.
+
+You have been invoked with the `/pr` command.
+
+## Orchestrator constraints
+
+1. Run the quality gate and open the PR; do not bypass failing gates.
+2. Delegate review to the review agents; do not review code yourself.
+3. **Be concise.** Report gate results and the PR URL, no preamble.
+
+## Parse Arguments
+
+Arguments: $ARGUMENTS
+
+- `--skip-review`: Skip the `/code-review` step (not recommended)
+- `--draft`: Create a draft PR
+- `--base <branch>`: Target branch (default: `main`)
+- `--no-auto-merge`: Do not enable auto-merge (the default is to enable it; see Step 5)
+
+## Steps
+
+### 1. Pre-flight checks
+
+Verify:
+
+- Current branch is not `main` or `master`
+- There are commits ahead of the base branch
+- Working tree is clean (no uncommitted changes) — if dirty, ask whether to commit or stash
+
+### 2. Run quality gate
+
+Run each check sequentially. Stop on first failure:
+
+1. **Tests**: `uv run pytest -q tests`
+2. **Type check**: `uvx pyrefly check`
+3. **Lint**: `uvx ruff check` and `uvx ruff format --check`
+4. **Security** (optional but recommended for this project): `uvx bandit -r src -ll`
+5. **Code review** (unless `--skip-review`):
+   - Run `/code-review --json`. `/pr` owns the human gate, so code-review runs non-interactively: it skips its own "fix or report?" prompt and applies its fix loop automatically (up to 5 iterations), then returns an aggregated status.
+   - Read the returned status field. A normal review returns `{"overall": "pass|warn|fail", ...}`; a documentation-only changeset short-circuits with `{"status": "skipped", ...}`:
+     - `overall` of `pass` / `warn`, or `status` of `skipped` → continue to step 3.
+     - `overall` of `fail` → show the remaining findings and ask the user whether to proceed anyway or stop and fix.
+
+Report results as a checklist:
+
+```
+## Quality Gate
+- [x] Tests pass (N passed, 0 failed)
+- [x] Type check clean (pyrefly)
+- [x] Lint clean (ruff check, ruff format --check)
+- [ ] Code review: 2 warnings (see below)
+```
+
+### 3. Generate PR summary
+
+Analyze the diff against the base branch (`git diff <base>...HEAD`) and commit history to generate:
+
+- **Title**: Short, imperative (<70 chars)
+- **Summary**: 1-3 bullet points of what changed and why
+- **Test plan**: How to verify the changes
+
+### 4. Create the PR
+
+```bash
+gh pr create --title "<title>" --body "<body>" [--draft] --base <base>
+```
+
+Use the structured template:
+
+```markdown
+## Summary
+- <bullet 1>
+- <bullet 2>
+
+## Quality Gate
+- [x] Tests: <N> passed
+- [x] Type check: clean
+- [x] Lint: clean
+- [x] Code review: <status>
+
+## Test Plan
+- [ ] <verification step 1>
+- [ ] <verification step 2>
+```
+
+### 5. Enable auto-merge (default)
+
+Unless `--no-auto-merge` or `--draft` was given, enable auto-merge so the PR lands automatically once checks pass and any required reviews are in.
+
+```bash
+gh pr merge --auto --squash
+```
+
+If the repository does not have auto-merge enabled (the command errors), report that and leave the PR open for manual merge — do **not** merge directly to trunk to work around it.
+
+### 6. Report
+
+Display the PR URL and a summary of the quality gate results.
+
+If any gate failed and the user chose to proceed anyway, note this in the PR body as a caveat.
