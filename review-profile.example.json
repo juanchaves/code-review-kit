@@ -1,0 +1,95 @@
+{
+  "personas": [
+    "correctness",
+    "security",
+    "architecture",
+    "test-quality"
+  ],
+  "baselines": [
+    "methodology-core",
+    "code-smells-refactoring",
+    "review-quality-gates"
+  ],
+  "tools": [
+    "python-ruff",
+    "python-pyrefly",
+    "python-bandit",
+    "python-radon",
+    "shell-shellcheck",
+    "shell-shfmt",
+    "shell-bats",
+    "js-biome",
+    "js-tsc",
+    "js-typescript-eslint",
+    "js-oxlint",
+    "security-semgrep",
+    "security-osv-scanner",
+    "security-gitleaks",
+    "security-detect-secrets",
+    "complexity-lizard"
+  ],
+  "languages": [
+    "typescript"
+  ],
+  "specialties": [
+    "cdk"
+  ],
+  "strategies": [
+    "adversarial",
+    "devils-advocate",
+    "failure-mode",
+    "strategic-critic"
+  ],
+  "strategy_mode": "fanout",
+  "token_profile": "efficient",
+  "token_strategy": {
+    "toon": true,
+    "cache_mode": "context",
+    "model_routing": "right-size",
+    "max_parallel_units": 4,
+    "max_files_per_unit": 80,
+    "max_file_hints": 8
+  },
+  "extensions": {
+    "personas": {
+      "compliance": {
+        "title": "Compliance Reviewer",
+        "goal": "Verify controls and auditability expectations.",
+        "checks": [
+          "Control traceability for sensitive operations",
+          "Retention and access logging expectations",
+          "Policy and implementation consistency"
+        ],
+        "file_hints": [
+          "compliance/**",
+          "policies/**",
+          "infra/**"
+        ]
+      }
+    },
+    "specialties": {
+      "event-driven": {
+        "title": "Event-Driven Systems Pack",
+        "practices": [
+          "Idempotency across retries and replays",
+          "Consumer ordering and duplicate-event handling",
+          "Dead-letter and recovery strategy completeness"
+        ],
+        "file_hints": [
+          "events/**",
+          "consumers/**",
+          "queues/**"
+        ]
+      }
+    },
+    "strategies": {
+      "boundary-breaker": {
+        "title": "Boundary Breaker",
+        "directives": [
+          "Probe boundary assumptions between components.",
+          "Search for contract mismatches and hidden coupling."
+        ]
+      }
+    }
+  }
+}

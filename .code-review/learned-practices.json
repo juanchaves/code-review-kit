@@ -1,0 +1,17 @@
+{
+  "extensions": {
+    "specialties": {
+      "repo-learnings": {
+        "title": "Repository Learnings Pack",
+        "practices": [
+          "Only emit repo-specific feedback backed by evidence from this run",
+          "Only emit shared-check overlap feedback when overlap is evidenced in the current run",
+          "Tool setup notes must include explicit Linux/WSL alternatives whenever macOS commands are listed."
+        ],
+        "file_hints": [
+          "**/*"
+        ]
+      }
+    }
+  }
+}

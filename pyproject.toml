@@ -1,0 +1,41 @@
+[project]
+name = "code-review"
+version = "1.0.0"
+description = "Configurable multi-persona code review CLI"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.12"
+dependencies = []
+
+[project.scripts]
+crk = "code_review.cli:main"
+code-review = "code_review.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.11.7,<0.12.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = "src"
+
+[tool.ruff]
+line-length = 120
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.mutmut]
+source_paths = "src/code_review/review_planner"
+runner = "uv run pytest -q tests"
+pytest_add_cli_args_test_selection = "tests"
+max_stack_depth = 8
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-forked>=1.6.0",
+    "pytest-mock>=3.15.1",
+    "pytest-xdist>=3.8.0",
+    "requests-mock>=1.12.1",
+    "typeguard>=4.5.2",
+]
