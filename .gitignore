@@ -1,0 +1,12 @@
+.ruff_cache/
+__pycache__/
+*.pyc
+node_modules/
+
+# Repo-local code-review runtime artifacts
+.code-review/feedback/
+.code-review/state.json
+
+# Keep durable repository learnings under version control
+!.code-review/
+!.code-review/learned-practices.json
