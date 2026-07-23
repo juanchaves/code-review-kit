@@ -290,8 +290,8 @@ Full repo lint/type/security/complexity gates still run in review mode, not duri
 Use mutation testing to pressure-check the review and bootstrap logic:
 
 ```bash
-uvx mutmut run
-uvx mutmut browse
+uv run mutmut run
+uv run mutmut browse
 ```
 
 `pyproject.toml` pins the source and test selection so mutmut focuses on `src/code_review/review_planner/` with the `tests/` suite.
@@ -303,7 +303,7 @@ For Python repositories, run deterministic gates with:
 ```bash
 uvx ruff check
 uvx ruff format --check
-uvx pyrefly check
+uv run pyrefly check
 uvx bandit -r src -ll
 ```
 
