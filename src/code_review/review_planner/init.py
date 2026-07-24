@@ -1,17 +1,17 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import UTC, datetime
 import inspect
-import os
 import json
-from pathlib import Path
+import os
 import shlex
+import shutil
 import subprocess
 import sys
 import time
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
 from textwrap import dedent
-import shutil
 
 from .doc_contract import (
     harness_parity_lines,
@@ -128,7 +128,7 @@ def _is_wsl() -> bool:
         return False
 
 
-def _platform_label() -> str:
+def platform_label() -> str:
     if sys.platform == "darwin":
         return "macOS"
     if sys.platform == "win32":
@@ -136,7 +136,7 @@ def _platform_label() -> str:
     return "Linux/WSL" if sys.platform.startswith("linux") or _is_wsl() else "Linux/WSL"
 
 
-def _command_for_platform(note: str, platform_label: str) -> str | None:
+def _command_for_platform(note: str, platform_name: str) -> str | None:
     raw = note.strip()
     if not raw:
         return None
@@ -145,7 +145,7 @@ def _command_for_platform(note: str, platform_label: str) -> str | None:
     if "macOS:" in raw or "Linux/WSL:" in raw:
         for part in raw.split(";"):
             item = part.strip()
-            prefix = f"{platform_label}:"
+            prefix = f"{platform_name}:"
             if item.startswith(prefix):
                 return item[len(prefix) :].strip()
         return None
@@ -706,11 +706,7 @@ def promote_accepted_feedback_to_learnings(*, target: Path, feedback_ids: list[s
     if not isinstance(items, dict):
         raise ValueError("Feedback state file is invalid: 'items' must be an object.")
 
-    allowed_ids = {
-        item.strip()
-        for item in (feedback_ids or [])
-        if isinstance(item, str) and item.strip()
-    }
+    allowed_ids = {item.strip() for item in (feedback_ids or []) if isinstance(item, str) and item.strip()}
     promoted_ids: list[str] = []
     learned_practices: list[str] = []
     now = datetime.now(UTC).isoformat()
@@ -861,8 +857,7 @@ def render_uninstall_result(result: UninstallResult, *, harness: str, name: str)
         "-----",
         "",
         *(
-            [f"- removed: {path}" for path in result.removed]
-            + [f"- not found: {path}" for path in result.skipped]
+            [f"- removed: {path}" for path in result.removed] + [f"- not found: {path}" for path in result.skipped]
             or ["- (none)"]
         ),
     ]
@@ -920,9 +915,11 @@ def run_selected_tool_setup(
     interactive: bool | None = None,
     command_environment: dict[str, str] | None = None,
 ) -> tuple[list[dict], str | None]:
-    platform_label = _platform_label()
+    platform = platform_label()
     results: list[dict] = []
-    policy = approval_policy if isinstance(approval_policy, dict) else {"mode": "allow-selected", "approved_commands": []}
+    policy = (
+        approval_policy if isinstance(approval_policy, dict) else {"mode": "allow-selected", "approved_commands": []}
+    )
     if interactive is None:
         interactive = bool(sys.stdin.isatty() and sys.stdout.isatty())
 
@@ -933,7 +930,7 @@ def run_selected_tool_setup(
         for note in gate.get("setup", []):
             if not isinstance(note, str):
                 continue
-            command = _command_for_platform(note, platform_label)
+            command = _command_for_platform(note, platform)
             if command is None:
                 if note.strip() == "uv installed":
                     if shutil.which("uv") is None:
@@ -1075,34 +1072,6 @@ def run_deterministic_gates(
     return results, error
 
 
-def render_tool_setup_results(results: list[dict]) -> str:
-    lines = [
-        "## Tool setup execution",
-        "",
-        f"Platform: {_platform_label()}",
-        "",
-    ]
-    if not results:
-        lines.append("No selected tool packs required setup.")
-        return "\n".join(lines) + "\n"
-
-    for result in results:
-        lines.append(f"- **{result['id']}**: {result['status']}")
-        for step in result.get("steps", []):
-            status = step.get("status", "passed")
-            prefix = (
-                "setup"
-                if step.get("kind") == "setup"
-                else "verify"
-                if step.get("kind") == "verify"
-                else "review"
-                if step.get("kind") == "review"
-                else "prereq"
-            )
-            lines.append(f"  - {prefix}: `{step.get('text', '')}` ({status})")
-    return "\n".join(lines) + "\n"
-
-
 def tool_setup_feedback(results: list[dict], error: str | None) -> tuple[list[dict], list[str]]:
     actions: list[dict] = []
     feedback: list[str] = []
@@ -1111,7 +1080,11 @@ def tool_setup_feedback(results: list[dict], error: str | None) -> tuple[list[di
         return actions, feedback
 
     failed_result = next((result for result in results if result.get("status") == "failed"), None)
-    tool_id = str(failed_result.get("id", "deterministic-tool-gate")) if isinstance(failed_result, dict) else "deterministic-tool-gate"
+    tool_id = (
+        str(failed_result.get("id", "deterministic-tool-gate"))
+        if isinstance(failed_result, dict)
+        else "deterministic-tool-gate"
+    )
     title = f"Deterministic tool gate failed for {tool_id}"
     action = error
     if isinstance(failed_result, dict):
@@ -1147,7 +1120,11 @@ def tool_review_feedback(results: list[dict], error: str | None) -> tuple[list[d
         return actions, feedback
 
     failed_result = next((result for result in results if result.get("status") == "failed"), None)
-    tool_id = str(failed_result.get("id", "deterministic-tool-gate")) if isinstance(failed_result, dict) else "deterministic-tool-gate"
+    tool_id = (
+        str(failed_result.get("id", "deterministic-tool-gate"))
+        if isinstance(failed_result, dict)
+        else "deterministic-tool-gate"
+    )
     title = f"Review gate failed for {tool_id}"
     action = error
     if isinstance(failed_result, dict):
@@ -1248,7 +1225,7 @@ def run_bootstrap_with_status(*, target: Path, harness: str, name: str) -> Boots
     print(_color("=================", CYAN))
     print(f"Harness: {harness}")
     print(f"Target: {target}")
-    print("")
+    print()
 
     for artifact in artifacts:
         relative = artifact.path.relative_to(target)
@@ -1272,7 +1249,7 @@ def run_bootstrap_with_status(*, target: Path, harness: str, name: str) -> Boots
             sys.stdout.write(f"\r{_color(CHECKMARK, GREEN)} {_color('Created', BLUE)} `{relative}`{' ' * 20}\n")
         sys.stdout.flush()
 
-    print("")
+    print()
     print(colorize_console_block(render_bootstrap_result(result, harness=harness, name=name, wizard_started=False)))
     return result
 
@@ -1316,10 +1293,10 @@ def render_bootstrap_result(result: BootstrapResult, *, harness: str, name: str,
 def pause_for_acknowledgement(message: str) -> None:
     if not sys.stdin.isatty() or not sys.stdout.isatty():
         return
-    print("")
+    print()
     print(_color("=" * 72, CYAN))
     print(_color(message.strip(), f"{BOLD}{GREEN}"))
-    print("")
+    print()
     print(_color(">>> Press Enter to continue <<<", f"{BOLD}{MAGENTA}"))
     print(_color("=" * 72, CYAN))
     input()
