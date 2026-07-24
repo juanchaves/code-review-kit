@@ -21,10 +21,8 @@ from .review_planner.init import (
     default_state_path,
     extract_state_payload,
     load_state,
-    merge_learned_extensions,
     pause_for_acknowledgement,
     promote_accepted_feedback_to_learnings,
-    record_learned_practices,
     resolve_setup_tool_policy,
     render_deselection_summary,
     render_init_plan,
@@ -45,6 +43,7 @@ from .review_planner.init import (
     write_feedback_report,
 )
 from .review_planner.io_utils import load_json
+from .review_planner.learning import merge_learned_extensions, record_learned_practices
 from .review_planner.migration import CURRENT_SCHEMA_VERSION, migrate_config_payload
 from .review_planner.plugins.execution import build_default_execution_registry
 from .review_planner.plugins.governance import build_default_governance_registry

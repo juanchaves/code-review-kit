@@ -2,7 +2,7 @@
 
 **Created**: 2026-07-24
 **Branch**: main
-**Status**: approved
+**Status**: in-progress
 
 ## Goal
 
@@ -337,22 +337,22 @@ with no new abstractions.
   - [x] Step 1.1: Move `render_tool_setup_results` to `render.py`; rename `_platform_label` to public `platform_label`
 
 #### Wave 2
-- [ ] Slice 2: Extract learned-practices persistence into `review_planner/learning.py`
-  - [ ] Step 2.1: Move learned-practices persistence to `review_planner/learning.py`
+- [x] Slice 2: Extract learned-practices persistence into `review_planner/learning.py`
+  - [x] Step 2.1: Move learned-practices persistence to `review_planner/learning.py`
 
 ### Acceptance Criteria
 
-- [ ] `review_planner/init.py` no longer defines the relocated functions, helpers, or the
+- [x] `review_planner/init.py` no longer defines the relocated functions, helpers, or the
       `LEARNED_PRACTICES_FILE` constant (verified by source-level import-graph checks, not
       just behavioral tests).
 - [x] `review_planner/render.py` defines `render_tool_setup_results` locally; `run_selected_tool_setup`
       still succeeds after the `platform_label` rename (no `UnboundLocalError`).
-- [ ] `review_planner/learning.py` exists with learned-practices persistence, behavior unchanged.
-- [ ] `cli.py`'s import statement for the learned-practices functions references
+- [x] `review_planner/learning.py` exists with learned-practices persistence, behavior unchanged.
+- [x] `cli.py`'s import statement for the learned-practices functions references
       `review_planner.learning` directly (source-level check).
-- [ ] `init.py`'s only permitted cross-module import is `record_learned_practices` from `learning.py`.
-- [ ] Full test suite passes with zero behavior changes.
-- [ ] `uvx ruff check` and `uv run pyrefly check` remain clean.
+- [x] `init.py`'s only permitted cross-module import is `record_learned_practices` from `learning.py`.
+- [x] Full test suite passes with zero behavior changes.
+- [x] `uvx ruff check` and `uv run pyrefly check` remain clean.
 
 ## Plan Review Summary
 

@@ -19,10 +19,7 @@ from code_review.review_planner.init import (
     default_feedback_learning_queue_path,
     default_feedback_report_path,
     default_feedback_state_path,
-    default_learned_practices_path,
-    merge_learned_extensions,
     promote_accepted_feedback_to_learnings,
-    record_learned_practices,
     render_bootstrap_result,
     render_deselection_summary,
     render_init_plan,
@@ -39,6 +36,7 @@ from code_review.review_planner.init import (
     write_feedback_learning_queue,
     write_feedback_report,
 )
+from code_review.review_planner.learning import default_learned_practices_path
 
 
 def test_build_bootstrap_artifacts_includes_agent_and_instructions(tmp_path: Path) -> None:
@@ -798,28 +796,6 @@ def test_handle_install_or_init_command_pr_workflow_defaults_to_comment(monkeypa
     exit_code = cli_module.handle_install_or_init_command(args)
     assert exit_code == 0
     assert captured_post_actions == ["comment"]
-
-
-def test_record_learned_practices_persists_repo_pack(tmp_path: Path) -> None:
-    payload = record_learned_practices(
-        target=tmp_path,
-        practices=["Prefer explicit empty-state copy in TUI screens."],
-    )
-    learned_path = default_learned_practices_path(target=tmp_path)
-    assert learned_path.exists()
-    practices = payload["extensions"]["specialties"]["repo-learnings"]["practices"]
-    assert "Prefer explicit empty-state copy in TUI screens." in practices
-
-
-def test_merge_learned_extensions_adds_repo_specialty_pack(tmp_path: Path) -> None:
-    record_learned_practices(
-        target=tmp_path,
-        practices=["Use concise action labels in menu footers."],
-    )
-    merged = merge_learned_extensions(config={}, target=tmp_path)
-    assert "extensions" in merged
-    assert "specialties" in merged["extensions"]
-    assert "repo-learnings" in merged["extensions"]["specialties"]
 
 
 def test_write_feedback_report_persists_actions(tmp_path: Path) -> None:
