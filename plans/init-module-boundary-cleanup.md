@@ -1,7 +1,7 @@
 # Plan: Init Module Boundary Cleanup
 
 **Created**: 2026-07-24
-**Branch**: main
+**Branch**: refactor/init-module-boundary-cleanup
 **Status**: in-progress
 
 ## Goal

@@ -12,6 +12,34 @@ from code_review.review_planner.learning import (
 )
 
 
+def _read_source(relative_path: str) -> str:
+    repo_root = Path(__file__).resolve().parents[1]
+    return (repo_root / relative_path).read_text(encoding="utf-8")
+
+
+def _collect_import_from(source: str) -> dict[str, set[str]]:
+    """Maps each imported module to the names imported from it.
+
+    Handles `from x import y` (keyed by `x`), `from . import x` (keyed by the
+    submodule name `x` itself, since the alias IS the module), and bare
+    `import x.y` (keyed by the dotted path itself) — so a boundary check can't
+    be defeated by switching import styles.
+    """
+    tree = ast.parse(source)
+    imports: dict[str, set[str]] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            if node.module:
+                imports.setdefault(node.module, set()).update(alias.name for alias in node.names)
+            else:
+                for alias in node.names:
+                    imports.setdefault(alias.name, set()).add(alias.name)
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                imports.setdefault(alias.name, set()).add(alias.name)
+    return imports
+
+
 def test_record_learned_practices_is_owned_by_learning_module() -> None:
     assert record_learned_practices.__module__ == "code_review.review_planner.learning"
 
@@ -49,6 +77,7 @@ def test_merge_learned_extensions_adds_repo_specialty_pack(tmp_path: Path) -> No
         "default_learned_practices_path",
         "load_learned_practices",
         "save_learned_practices",
+        "LEARNED_PRACTICES_FILE",
     ],
 )
 def test_relocated_names_not_importable_from_init(name: str) -> None:
@@ -57,41 +86,40 @@ def test_relocated_names_not_importable_from_init(name: str) -> None:
 
 
 def test_learning_module_has_no_cross_import() -> None:
-    repo_root = Path(__file__).resolve().parents[1]
-    learning_source = (repo_root / "src/code_review/review_planner/learning.py").read_text(encoding="utf-8")
-    init_source = (repo_root / "src/code_review/review_planner/init.py").read_text(encoding="utf-8")
+    learning_imports = _collect_import_from(_read_source("src/code_review/review_planner/learning.py"))
+    assert not any(module.endswith("init") for module in learning_imports)
+    assert not any(module.endswith("render") for module in learning_imports)
 
-    learning_tree = ast.parse(learning_source)
-    learning_modules = {
-        node.module for node in ast.walk(learning_tree) if isinstance(node, ast.ImportFrom) and node.module
-    }
-    assert not any(module.endswith("init") for module in learning_modules)
-    assert not any(module.endswith("render") for module in learning_modules)
-
-    init_tree = ast.parse(init_source)
-    init_modules = {node.module for node in ast.walk(init_tree) if isinstance(node, ast.ImportFrom) and node.module}
-    assert not any(module.endswith("render") for module in init_modules)
+    init_imports = _collect_import_from(_read_source("src/code_review/review_planner/init.py"))
+    assert not any(module.endswith("render") for module in init_imports)
 
     init_learning_names: set[str] = set()
-    for node in ast.walk(init_tree):
-        if isinstance(node, ast.ImportFrom) and node.module and node.module.endswith("learning"):
-            init_learning_names.update(alias.name for alias in node.names)
+    for module, names in init_imports.items():
+        if module.endswith("learning"):
+            init_learning_names.update(names)
     assert init_learning_names == {"record_learned_practices"}
 
 
+def test_render_module_only_imports_platform_label_from_init() -> None:
+    render_imports = _collect_import_from(_read_source("src/code_review/review_planner/render.py"))
+
+    render_init_names: set[str] = set()
+    for module, names in render_imports.items():
+        if module.endswith("init"):
+            render_init_names.update(names)
+    assert render_init_names == {"platform_label"}
+
+
 def test_cli_imports_learned_practices_from_learning_module() -> None:
-    repo_root = Path(__file__).resolve().parents[1]
-    cli_source = (repo_root / "src/code_review/cli.py").read_text(encoding="utf-8")
-    tree = ast.parse(cli_source)
+    cli_imports = _collect_import_from(_read_source("src/code_review/cli.py"))
 
     learning_names: set[str] = set()
     init_names: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module:
-            if node.module.endswith("review_planner.learning"):
-                learning_names.update(alias.name for alias in node.names)
-            elif node.module.endswith("review_planner.init"):
-                init_names.update(alias.name for alias in node.names)
+    for module, names in cli_imports.items():
+        if module.endswith("review_planner.learning"):
+            learning_names.update(names)
+        elif module.endswith("review_planner.init"):
+            init_names.update(names)
 
     assert "merge_learned_extensions" in learning_names
     assert "record_learned_practices" in learning_names
