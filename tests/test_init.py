@@ -7,37 +7,36 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import code_review.cli as cli_module
+import code_review.review_planner.init
+from code_review.review_planner.catalog import TOOL_PACKS
 from code_review.review_planner.init import (
-    apply_feedback_status_updates,
     apply_bootstrap,
+    apply_feedback_status_updates,
     build_bootstrap_artifacts,
+    choose_pull_request_reference,
+    choose_review_workflow_after_init,
     compute_deselections,
-    default_learned_practices_path,
-    default_feedback_report_path,
     default_feedback_learning_queue_path,
+    default_feedback_report_path,
     default_feedback_state_path,
-    merge_learned_extensions,
-    render_deselection_summary,
+    promote_accepted_feedback_to_learnings,
     render_bootstrap_result,
+    render_deselection_summary,
     render_init_plan,
     render_plan_summary,
+    resolve_setup_tool_policy,
     run_deterministic_gates,
     run_selected_tool_setup,
     run_uninstall_commands,
-    record_learned_practices,
-    resolve_setup_tool_policy,
     should_start_review_after_init,
-    choose_review_workflow_after_init,
-    choose_pull_request_reference,
-    tool_setup_feedback,
     tool_review_feedback,
+    tool_setup_feedback,
+    uninstall_commands_for_tools,
     update_feedback_state,
     write_feedback_learning_queue,
     write_feedback_report,
-    promote_accepted_feedback_to_learnings,
-    uninstall_commands_for_tools,
 )
-from code_review.review_planner.catalog import TOOL_PACKS
+from code_review.review_planner.learning import default_learned_practices_path
 
 
 def test_build_bootstrap_artifacts_includes_agent_and_instructions(tmp_path: Path) -> None:
@@ -159,7 +158,9 @@ def test_publish_pr_comment_uses_explicit_pull_request_reference(tmp_path: Path,
         "review_scope": {"mode": "repo-current"},
         "review_axes": ["standards", "spec"],
         "review_pr_ref": "42",
-        "feedback_actions": [{"priority": "P1", "title": "Fix docs", "action": "Update prompt", "why": "Docs are stale"}],
+        "feedback_actions": [
+            {"priority": "P1", "title": "Fix docs", "action": "Update prompt", "why": "Docs are stale"}
+        ],
         "feedback_report": {"path": "/tmp/report.json"},
     }
 
@@ -222,7 +223,9 @@ def test_publish_pr_comment_posts_to_ado_pull_request(tmp_path: Path, monkeypatc
         "review_scope": {"mode": "repo-current"},
         "review_axes": ["standards", "spec"],
         "review_pr_ref": "7017",
-        "feedback_actions": [{"priority": "P1", "title": "Fix docs", "action": "Update prompt", "why": "Docs are stale"}],
+        "feedback_actions": [
+            {"priority": "P1", "title": "Fix docs", "action": "Update prompt", "why": "Docs are stale"}
+        ],
         "feedback_report": {"path": "/tmp/report.json"},
     }
 
@@ -275,8 +278,20 @@ def test_render_pr_comment_body_uses_conventional_comments_and_avoids_local_path
 def test_render_pr_comment_body_splits_tooling_from_review_findings() -> None:
     plan = {
         "feedback_actions": [
-            {"id": "deterministic-tool-gate-failed", "priority": "P1", "title": "Tool gate failed", "action": "Fix tool", "why": "failed"},
-            {"id": "spec-axis-empty", "priority": "P2", "title": "Spec axis has no requirements context", "action": "Add requirements", "why": "missing"},
+            {
+                "id": "deterministic-tool-gate-failed",
+                "priority": "P1",
+                "title": "Tool gate failed",
+                "action": "Fix tool",
+                "why": "failed",
+            },
+            {
+                "id": "spec-axis-empty",
+                "priority": "P2",
+                "title": "Spec axis has no requirements context",
+                "action": "Add requirements",
+                "why": "missing",
+            },
         ]
     }
     body = cli_module._render_pr_comment_body(
@@ -354,7 +369,7 @@ def test_run_selected_tool_setup_uses_linux_wsl_branch(monkeypatch) -> None:
         commands.append(command)
         return SimpleNamespace(returncode=0, stderr="")
 
-    monkeypatch.setattr("code_review.review_planner.init._platform_label", lambda: "Linux/WSL")
+    monkeypatch.setattr("code_review.review_planner.init.platform_label", lambda: "Linux/WSL")
     monkeypatch.setattr("code_review.review_planner.init.shutil.which", lambda name: "/usr/bin/uv")
     monkeypatch.setattr("code_review.review_planner.init._run_shell_command", fake_run_shell)
 
@@ -363,7 +378,9 @@ def test_run_selected_tool_setup_uses_linux_wsl_branch(monkeypatch) -> None:
             {
                 "id": "shell-shellcheck",
                 "title": "ShellCheck",
-                "setup": ["macOS: brew install shellcheck; Linux/WSL: sudo apt-get update && sudo apt-get install -y shellcheck"],
+                "setup": [
+                    "macOS: brew install shellcheck; Linux/WSL: sudo apt-get update && sudo apt-get install -y shellcheck"
+                ],
                 "commands": ["shellcheck **/*.sh **/*.bash **/*.zsh"],
             }
         ]
@@ -384,7 +401,7 @@ def test_run_selected_tool_setup_blocks_unapproved_commands_in_non_interactive_m
         commands.append(command)
         return SimpleNamespace(returncode=0, stderr="")
 
-    monkeypatch.setattr("code_review.review_planner.init._platform_label", lambda: "macOS")
+    monkeypatch.setattr("code_review.review_planner.init.platform_label", lambda: "macOS")
     monkeypatch.setattr("code_review.review_planner.init._run_shell_command", fake_run_shell)
 
     results, error = run_selected_tool_setup(
@@ -403,6 +420,17 @@ def test_run_selected_tool_setup_blocks_unapproved_commands_in_non_interactive_m
     assert "not approved" in str(error)
     assert results[0]["steps"][0]["status"] == "blocked"
     assert commands == []
+
+
+def test_run_selected_tool_setup_succeeds_after_platform_label_rename() -> None:
+    results, error = run_selected_tool_setup(deterministic_gates=[])
+
+    assert error is None
+    assert results == []
+
+
+def test_platform_label_rename_is_total() -> None:
+    assert not hasattr(code_review.review_planner.init, "_platform_label")
 
 
 def test_should_start_review_after_init_respects_action(monkeypatch) -> None:
@@ -461,7 +489,7 @@ def test_resolve_setup_tool_policy_overrides_mode_from_cli() -> None:
 def test_run_selected_tool_setup_shows_live_spinner_feedback_when_interactive(monkeypatch) -> None:
     calls: list[tuple[str, str, str | None]] = []
 
-    def fake_spinner(command: str, *, cwd=None, phase: str = "setup", tool_id: str | None = None):  # noqa: ANN001
+    def fake_spinner(command: str, *, cwd=None, phase: str = "setup", tool_id: str | None = None):
         calls.append((command, phase, tool_id))
         return SimpleNamespace(returncode=0, stderr="", stdout="")
 
@@ -506,7 +534,9 @@ def test_tool_setup_feedback_reports_failed_gate() -> None:
 
     assert actions[0]["id"] == "deterministic-tool-gate-failed"
     assert "uvx ruff --version" in actions[0]["action"]
-    assert feedback == ["[P1] Deterministic tool gate failed for python-ruff — Action: Fix `uvx ruff --version` and rerun the selected deterministic gate."]
+    assert feedback == [
+        "[P1] Deterministic tool gate failed for python-ruff — Action: Fix `uvx ruff --version` and rerun the selected deterministic gate."
+    ]
 
 
 def test_run_deterministic_gates_executes_review_commands_in_target(tmp_path: Path, monkeypatch) -> None:
@@ -558,7 +588,7 @@ def test_run_deterministic_gates_passes_command_environment(tmp_path: Path, monk
 def test_run_deterministic_gates_uses_spinner_when_interactive(tmp_path: Path, monkeypatch) -> None:
     calls: list[tuple[str, str, str | None, str | None]] = []
 
-    def fake_spinner(command: str, *, cwd=None, phase: str = "setup", tool_id: str | None = None):  # noqa: ANN001
+    def fake_spinner(command: str, *, cwd=None, phase: str = "setup", tool_id: str | None = None):
         calls.append((command, str(cwd) if cwd is not None else None, phase, tool_id))
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
@@ -589,7 +619,9 @@ def test_tool_review_feedback_reports_failed_gate() -> None:
 
     assert actions[0]["id"] == "deterministic-review-gate-failed"
     assert "uvx bandit -r src" in actions[0]["action"]
-    assert feedback == ["[P1] Review gate failed for python-bandit — Action: Fix `uvx bandit -r src` and rerun the selected review gate."]
+    assert feedback == [
+        "[P1] Review gate failed for python-bandit — Action: Fix `uvx bandit -r src` and rerun the selected review gate."
+    ]
 
 
 def test_compute_deselections_tracks_best_practices_and_tools() -> None:
@@ -633,7 +665,7 @@ def test_uninstall_commands_for_tools_returns_known_commands() -> None:
 def test_run_uninstall_commands_uses_live_spinner_feedback_when_interactive(monkeypatch) -> None:
     calls: list[tuple[str, str, str | None]] = []
 
-    def fake_spinner(command: str, *, cwd=None, phase: str = "setup", tool_id: str | None = None):  # noqa: ANN001
+    def fake_spinner(command: str, *, cwd=None, phase: str = "setup", tool_id: str | None = None):
         calls.append((command, phase, tool_id))
         return SimpleNamespace(returncode=0, stderr="", stdout="")
 
@@ -651,10 +683,14 @@ def test_handle_install_or_init_command_prompts_before_uninstall(monkeypatch, tm
     prompts: list[str] = []
     runs: list[tuple[list[tuple[str, str]], bool]] = []
 
-    monkeypatch.setattr(cli_module, "run_bootstrap_with_status", lambda **kwargs: SimpleNamespace(created=[], updated=[], skipped=[]))
+    monkeypatch.setattr(
+        cli_module, "run_bootstrap_with_status", lambda **kwargs: SimpleNamespace(created=[], updated=[], skipped=[])
+    )
     monkeypatch.setattr(cli_module, "merge_learned_extensions", lambda **kwargs: {})
     monkeypatch.setattr(cli_module, "build_dynamic_catalog", lambda _config: ({}, {}, {}, {}, {}, {}))
-    monkeypatch.setattr(cli_module, "resolve_setup_tool_policy", lambda **kwargs: {"mode": "allow-selected", "approved_commands": []})
+    monkeypatch.setattr(
+        cli_module, "resolve_setup_tool_policy", lambda **kwargs: {"mode": "allow-selected", "approved_commands": []}
+    )
     monkeypatch.setattr(cli_module, "state_to_wizard_config", lambda _state: {})
     monkeypatch.setattr(cli_module, "load_state", lambda _path: {})
     monkeypatch.setattr(cli_module, "default_state_path", lambda **kwargs: tmp_path / "state.json")
@@ -664,12 +700,20 @@ def test_handle_install_or_init_command_prompts_before_uninstall(monkeypatch, tm
     monkeypatch.setattr(cli_module, "run_selected_tool_setup", lambda **kwargs: ([], None))
     monkeypatch.setattr(cli_module, "show_setup_summary", lambda **kwargs: None)
     monkeypatch.setattr(cli_module, "compute_deselections", lambda **kwargs: {"tools": ["js-biome"]})
-    monkeypatch.setattr(cli_module, "uninstall_commands_for_tools", lambda **kwargs: [("js-biome", "npm remove -D @biomejs/biome")])
+    monkeypatch.setattr(
+        cli_module, "uninstall_commands_for_tools", lambda **kwargs: [("js-biome", "npm remove -D @biomejs/biome")]
+    )
     monkeypatch.setattr(cli_module, "render_deselection_summary", lambda *_args, **_kwargs: "deselections")
     monkeypatch.setattr(cli_module, "render_uninstall_commands", lambda *_args, **_kwargs: "uninstall commands")
     monkeypatch.setattr(cli_module, "should_start_review_after_init", lambda **kwargs: False)
-    monkeypatch.setattr(cli_module, "run_uninstall_commands", lambda commands, interactive=False: runs.append((commands, interactive)) or [("js-biome", "npm remove -D @biomejs/biome", 0)])
-    monkeypatch.setattr("builtins.input", lambda prompt='': prompts.append(prompt) or 'y')
+    monkeypatch.setattr(
+        cli_module,
+        "run_uninstall_commands",
+        lambda commands, interactive=False: (
+            runs.append((commands, interactive)) or [("js-biome", "npm remove -D @biomejs/biome", 0)]
+        ),
+    )
+    monkeypatch.setattr("builtins.input", lambda prompt="": prompts.append(prompt) or "y")
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("sys.stdout.isatty", lambda: True)
 
@@ -701,15 +745,21 @@ def test_handle_install_or_init_command_pr_workflow_defaults_to_comment(monkeypa
     captured_post_actions: list[str] = []
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("sys.stdout.isatty", lambda: True)
-    monkeypatch.setattr(cli_module, "run_bootstrap_with_status", lambda **kwargs: SimpleNamespace(created=[], updated=[], skipped=[]))
+    monkeypatch.setattr(
+        cli_module, "run_bootstrap_with_status", lambda **kwargs: SimpleNamespace(created=[], updated=[], skipped=[])
+    )
     monkeypatch.setattr(cli_module, "merge_learned_extensions", lambda **kwargs: {})
     monkeypatch.setattr(cli_module, "build_dynamic_catalog", lambda _config: ({}, {}, {}, {}, {}, {}))
-    monkeypatch.setattr(cli_module, "resolve_setup_tool_policy", lambda **kwargs: {"mode": "allow-selected", "approved_commands": []})
+    monkeypatch.setattr(
+        cli_module, "resolve_setup_tool_policy", lambda **kwargs: {"mode": "allow-selected", "approved_commands": []}
+    )
     monkeypatch.setattr(cli_module, "state_to_wizard_config", lambda _state: {})
     monkeypatch.setattr(cli_module, "load_state", lambda _path: {})
     monkeypatch.setattr(cli_module, "default_state_path", lambda **kwargs: tmp_path / "state.json")
     monkeypatch.setattr(cli_module, "run_review_wizard", lambda **kwargs: {})
-    monkeypatch.setattr(cli_module, "build_plan", lambda **kwargs: {"selections": {"tools": []}, "deterministic_gates": []})
+    monkeypatch.setattr(
+        cli_module, "build_plan", lambda **kwargs: {"selections": {"tools": []}, "deterministic_gates": []}
+    )
     monkeypatch.setattr(cli_module, "save_state", lambda **kwargs: None)
     monkeypatch.setattr(cli_module, "run_selected_tool_setup", lambda **kwargs: ([], None))
     monkeypatch.setattr(cli_module, "show_setup_summary", lambda **kwargs: None)
@@ -748,28 +798,6 @@ def test_handle_install_or_init_command_pr_workflow_defaults_to_comment(monkeypa
     assert captured_post_actions == ["comment"]
 
 
-def test_record_learned_practices_persists_repo_pack(tmp_path: Path) -> None:
-    payload = record_learned_practices(
-        target=tmp_path,
-        practices=["Prefer explicit empty-state copy in TUI screens."],
-    )
-    learned_path = default_learned_practices_path(target=tmp_path)
-    assert learned_path.exists()
-    practices = payload["extensions"]["specialties"]["repo-learnings"]["practices"]
-    assert "Prefer explicit empty-state copy in TUI screens." in practices
-
-
-def test_merge_learned_extensions_adds_repo_specialty_pack(tmp_path: Path) -> None:
-    record_learned_practices(
-        target=tmp_path,
-        practices=["Use concise action labels in menu footers."],
-    )
-    merged = merge_learned_extensions(config={}, target=tmp_path)
-    assert "extensions" in merged
-    assert "specialties" in merged["extensions"]
-    assert "repo-learnings" in merged["extensions"]["specialties"]
-
-
 def test_write_feedback_report_persists_actions(tmp_path: Path) -> None:
     plan = {
         "selections": {"personas": ["correctness"]},
@@ -782,10 +810,10 @@ def test_write_feedback_report_persists_actions(tmp_path: Path) -> None:
     assert report_path == default_feedback_report_path(target=tmp_path)
     assert report_path.exists()
     payload = report_path.read_text(encoding="utf-8")
-    assert "\"feedback_actions\"" in payload
-    assert "\"generated_at\"" in payload
-    assert "\"tool_setup_results\"" in payload
-    assert "\"tool_review_results\"" in payload
+    assert '"feedback_actions"' in payload
+    assert '"generated_at"' in payload
+    assert '"tool_setup_results"' in payload
+    assert '"tool_review_results"' in payload
 
 
 def test_legacy_script_entrypoint_works_without_pythonpath(tmp_path: Path) -> None:
@@ -851,7 +879,10 @@ def test_run_review_effects_removes_placeholder_feedback_when_gates_pass(monkeyp
     monkeypatch.setattr(
         cli_module,
         "run_deterministic_gates",
-        lambda target, deterministic_gates, interactive=None: ([{"id": "python-ruff", "status": "passed", "steps": []}], None),
+        lambda target, deterministic_gates, interactive=None: (
+            [{"id": "python-ruff", "status": "passed", "steps": []}],
+            None,
+        ),
     )
 
     plan = {
@@ -866,7 +897,14 @@ def test_run_review_effects_removes_placeholder_feedback_when_gates_pass(monkeyp
             }
         ],
         "feedback": ["[P3] Feedback loop next step is ready — Action: Run one review cycle."],
-        "units": [{"persona_title": "Correctness Reviewer", "persona_goal": "Check behavior", "checks": [], "shared_checks": []}],
+        "units": [
+            {
+                "persona_title": "Correctness Reviewer",
+                "persona_goal": "Check behavior",
+                "checks": [],
+                "shared_checks": [],
+            }
+        ],
     }
 
     updated = cli_module._run_review_effects(plan=plan, review_target=Path("."))
@@ -884,7 +922,10 @@ def test_run_review_effects_can_skip_setup_rerun(monkeypatch) -> None:
     monkeypatch.setattr(
         cli_module,
         "run_deterministic_gates",
-        lambda target, deterministic_gates, interactive=None: ([{"id": "python-ruff", "status": "passed", "steps": []}], None),
+        lambda target, deterministic_gates, interactive=None: (
+            [{"id": "python-ruff", "status": "passed", "steps": []}],
+            None,
+        ),
     )
     plan = {"deterministic_gates": [{"id": "python-ruff"}], "feedback_actions": [], "feedback": [], "units": []}
     updated = cli_module._run_review_effects(
@@ -907,7 +948,10 @@ def test_run_review_effects_prints_progress_status_when_enabled(monkeypatch, cap
     monkeypatch.setattr(
         cli_module,
         "run_deterministic_gates",
-        lambda target, deterministic_gates, interactive=None: ([{"id": "python-ruff", "status": "passed", "steps": []}], None),
+        lambda target, deterministic_gates, interactive=None: (
+            [{"id": "python-ruff", "status": "passed", "steps": []}],
+            None,
+        ),
     )
     plan = {
         "selections": {"personas": ["correctness"], "tools": ["python-ruff"]},
@@ -986,7 +1030,9 @@ def test_finalize_review_output_prints_completion_summary(monkeypatch, tmp_path:
     monkeypatch.setattr(cli_module, "_resolve_post_review_action", lambda requested, active_pr: "plan")
 
     args = SimpleNamespace(emit="markdown", feedback_status=[], post_review_action="plan")
-    exit_code = cli_module._finalize_review_output(plan={"feedback_actions": [], "tool_review_results": [], "units": []}, review_target=tmp_path, args=args)
+    exit_code = cli_module._finalize_review_output(
+        plan={"feedback_actions": [], "tool_review_results": [], "units": []}, review_target=tmp_path, args=args
+    )
     output = capsys.readouterr().out
 
     assert exit_code == 0
@@ -1004,7 +1050,10 @@ def test_apply_requirements_walkthrough_uses_grilling_refiner(monkeypatch, tmp_p
     monkeypatch.setattr(
         cli_module,
         "derive_requirements",
-        lambda **_kwargs: {"requirements": [{"id": 1, "text": "A", "source": "docs", "confidence": "medium"}], "notes": []},
+        lambda **_kwargs: {
+            "requirements": [{"id": 1, "text": "A", "source": "docs", "confidence": "medium"}],
+            "notes": [],
+        },
     )
     monkeypatch.setattr(cli_module, "apply_grilling_refinement", fake_refiner)
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
@@ -1066,14 +1115,14 @@ def test_feedback_state_tracks_status_and_active_context(tmp_path: Path) -> None
     state_path = update_feedback_state(target=tmp_path, plan=plan)
     assert state_path == default_feedback_state_path(target=tmp_path)
     payload = state_path.read_text(encoding="utf-8")
-    assert "\"status\": \"open\"" in payload
-    assert "\"active_context\"" in payload
+    assert '"status": "open"' in payload
+    assert '"active_context"' in payload
 
     apply_feedback_status_updates(target=tmp_path, updates=["missing-language-pack:in_progress"])
     updated_payload = state_path.read_text(encoding="utf-8")
-    assert "\"status\": \"in_progress\"" in updated_payload
-    assert "\"active_context\"" in updated_payload
-    assert "\"status\": \"in_progress\"" in updated_payload.split("\"active_context\"")[1]
+    assert '"status": "in_progress"' in updated_payload
+    assert '"active_context"' in updated_payload
+    assert '"status": "in_progress"' in updated_payload.split('"active_context"')[1]
 
 
 def test_write_feedback_learning_queue_includes_open_in_progress_and_accepted_items(tmp_path: Path) -> None:
@@ -1098,7 +1147,13 @@ def test_write_feedback_learning_queue_includes_open_in_progress_and_accepted_it
 def test_promote_accepted_feedback_to_learnings_marks_items_done(tmp_path: Path) -> None:
     plan = {
         "feedback_actions": [
-            {"id": "accepted-item", "priority": "P1", "title": "Accepted", "action": "Use tighter diff scoping", "why": "noise"},
+            {
+                "id": "accepted-item",
+                "priority": "P1",
+                "title": "Accepted",
+                "action": "Use tighter diff scoping",
+                "why": "noise",
+            },
             {"id": "open-item", "priority": "P2", "title": "Open", "action": "Keep open", "why": "later"},
         ]
     }

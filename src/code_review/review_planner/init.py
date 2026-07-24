@@ -1,17 +1,17 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import UTC, datetime
 import inspect
-import os
 import json
-from pathlib import Path
+import os
 import shlex
+import shutil
 import subprocess
 import sys
 import time
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
 from textwrap import dedent
-import shutil
 
 from .doc_contract import (
     harness_parity_lines,
@@ -19,6 +19,7 @@ from .doc_contract import (
     workflow_contract_lines,
     workflow_instructions_lines,
 )
+from .learning import record_learned_practices
 from .migration import CURRENT_SCHEMA_VERSION, migrate_state_payload
 
 RESET = "\033[0m"
@@ -97,7 +98,6 @@ class UninstallResult:
 
 
 SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-LEARNED_PRACTICES_FILE = "learned-practices.json"
 FEEDBACK_REPORT_DIR = "feedback"
 FEEDBACK_REPORT_FILE = "latest.json"
 FEEDBACK_STATE_FILE = "state.json"
@@ -128,7 +128,7 @@ def _is_wsl() -> bool:
         return False
 
 
-def _platform_label() -> str:
+def platform_label() -> str:
     if sys.platform == "darwin":
         return "macOS"
     if sys.platform == "win32":
@@ -136,7 +136,7 @@ def _platform_label() -> str:
     return "Linux/WSL" if sys.platform.startswith("linux") or _is_wsl() else "Linux/WSL"
 
 
-def _command_for_platform(note: str, platform_label: str) -> str | None:
+def _command_for_platform(note: str, platform_name: str) -> str | None:
     raw = note.strip()
     if not raw:
         return None
@@ -145,7 +145,7 @@ def _command_for_platform(note: str, platform_label: str) -> str | None:
     if "macOS:" in raw or "Linux/WSL:" in raw:
         for part in raw.split(";"):
             item = part.strip()
-            prefix = f"{platform_label}:"
+            prefix = f"{platform_name}:"
             if item.startswith(prefix):
                 return item[len(prefix) :].strip()
         return None
@@ -421,10 +421,6 @@ def default_state_path(*, target: Path) -> Path:
     return target / ".code-review" / "state.json"
 
 
-def default_learned_practices_path(*, target: Path) -> Path:
-    return target / ".code-review" / LEARNED_PRACTICES_FILE
-
-
 def default_feedback_report_path(*, target: Path) -> Path:
     return target / ".code-review" / FEEDBACK_REPORT_DIR / FEEDBACK_REPORT_FILE
 
@@ -479,88 +475,6 @@ def resolve_setup_tool_policy(
 def save_state(*, state_path: Path, payload: dict) -> None:
     state_path.parent.mkdir(parents=True, exist_ok=True)
     state_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-
-
-def load_learned_practices(*, target: Path) -> dict:
-    learned_path = default_learned_practices_path(target=target)
-    if not learned_path.exists():
-        return {}
-    payload = json.loads(learned_path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        raise ValueError("Learned practices file must contain a JSON object.")
-    return payload
-
-
-def save_learned_practices(*, target: Path, payload: dict) -> None:
-    learned_path = default_learned_practices_path(target=target)
-    learned_path.parent.mkdir(parents=True, exist_ok=True)
-    learned_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-
-
-def record_learned_practices(
-    *,
-    target: Path,
-    practices: list[str],
-    specialty_id: str = "repo-learnings",
-    specialty_title: str = "Repository Learnings Pack",
-) -> dict:
-    learned = load_learned_practices(target=target)
-    extensions = learned.setdefault("extensions", {})
-    if not isinstance(extensions, dict):
-        raise ValueError("'extensions' in learned practices must be an object.")
-    specialties = extensions.setdefault("specialties", {})
-    if not isinstance(specialties, dict):
-        raise ValueError("'extensions.specialties' in learned practices must be an object.")
-    pack = specialties.setdefault(
-        specialty_id,
-        {"title": specialty_title, "practices": [], "file_hints": ["**/*"]},
-    )
-    if not isinstance(pack, dict):
-        raise ValueError("Learned specialty pack must be an object.")
-    existing = pack.setdefault("practices", [])
-    if not isinstance(existing, list):
-        raise ValueError("Learned specialty practices must be an array.")
-
-    for practice in practices:
-        if isinstance(practice, str) and practice.strip() and practice not in existing:
-            existing.append(practice.strip())
-
-    if "title" not in pack:
-        pack["title"] = specialty_title
-    if "file_hints" not in pack:
-        pack["file_hints"] = ["**/*"]
-    save_learned_practices(target=target, payload=learned)
-    return learned
-
-
-def merge_learned_extensions(*, config: dict, target: Path) -> dict:
-    learned = load_learned_practices(target=target)
-    if not learned:
-        return config
-    learned_extensions = learned.get("extensions", {})
-    if not isinstance(learned_extensions, dict):
-        raise ValueError("Learned practices extensions must be an object.")
-    merged = dict(config)
-    base_extensions = merged.get("extensions", {})
-    if base_extensions and not isinstance(base_extensions, dict):
-        raise ValueError("'extensions' must be an object when provided.")
-    merged_extensions = dict(base_extensions) if isinstance(base_extensions, dict) else {}
-    for section in ("personas", "baselines", "tools", "languages", "specialties", "strategies"):
-        existing_section = merged_extensions.get(section, {})
-        incoming_section = learned_extensions.get(section, {})
-        if incoming_section and not isinstance(incoming_section, dict):
-            raise ValueError(f"Learned extensions section '{section}' must be an object.")
-        if existing_section and not isinstance(existing_section, dict):
-            raise ValueError(f"Config extensions section '{section}' must be an object.")
-        section_data = dict(existing_section) if isinstance(existing_section, dict) else {}
-        if isinstance(incoming_section, dict):
-            for key, value in incoming_section.items():
-                section_data[key] = value
-        if section_data:
-            merged_extensions[section] = section_data
-    if merged_extensions:
-        merged["extensions"] = merged_extensions
-    return merged
 
 
 def write_feedback_report(*, target: Path, plan: dict) -> Path:
@@ -706,11 +620,7 @@ def promote_accepted_feedback_to_learnings(*, target: Path, feedback_ids: list[s
     if not isinstance(items, dict):
         raise ValueError("Feedback state file is invalid: 'items' must be an object.")
 
-    allowed_ids = {
-        item.strip()
-        for item in (feedback_ids or [])
-        if isinstance(item, str) and item.strip()
-    }
+    allowed_ids = {item.strip() for item in (feedback_ids or []) if isinstance(item, str) and item.strip()}
     promoted_ids: list[str] = []
     learned_practices: list[str] = []
     now = datetime.now(UTC).isoformat()
@@ -861,8 +771,7 @@ def render_uninstall_result(result: UninstallResult, *, harness: str, name: str)
         "-----",
         "",
         *(
-            [f"- removed: {path}" for path in result.removed]
-            + [f"- not found: {path}" for path in result.skipped]
+            [f"- removed: {path}" for path in result.removed] + [f"- not found: {path}" for path in result.skipped]
             or ["- (none)"]
         ),
     ]
@@ -920,9 +829,11 @@ def run_selected_tool_setup(
     interactive: bool | None = None,
     command_environment: dict[str, str] | None = None,
 ) -> tuple[list[dict], str | None]:
-    platform_label = _platform_label()
+    platform = platform_label()
     results: list[dict] = []
-    policy = approval_policy if isinstance(approval_policy, dict) else {"mode": "allow-selected", "approved_commands": []}
+    policy = (
+        approval_policy if isinstance(approval_policy, dict) else {"mode": "allow-selected", "approved_commands": []}
+    )
     if interactive is None:
         interactive = bool(sys.stdin.isatty() and sys.stdout.isatty())
 
@@ -933,7 +844,7 @@ def run_selected_tool_setup(
         for note in gate.get("setup", []):
             if not isinstance(note, str):
                 continue
-            command = _command_for_platform(note, platform_label)
+            command = _command_for_platform(note, platform)
             if command is None:
                 if note.strip() == "uv installed":
                     if shutil.which("uv") is None:
@@ -1075,34 +986,6 @@ def run_deterministic_gates(
     return results, error
 
 
-def render_tool_setup_results(results: list[dict]) -> str:
-    lines = [
-        "## Tool setup execution",
-        "",
-        f"Platform: {_platform_label()}",
-        "",
-    ]
-    if not results:
-        lines.append("No selected tool packs required setup.")
-        return "\n".join(lines) + "\n"
-
-    for result in results:
-        lines.append(f"- **{result['id']}**: {result['status']}")
-        for step in result.get("steps", []):
-            status = step.get("status", "passed")
-            prefix = (
-                "setup"
-                if step.get("kind") == "setup"
-                else "verify"
-                if step.get("kind") == "verify"
-                else "review"
-                if step.get("kind") == "review"
-                else "prereq"
-            )
-            lines.append(f"  - {prefix}: `{step.get('text', '')}` ({status})")
-    return "\n".join(lines) + "\n"
-
-
 def tool_setup_feedback(results: list[dict], error: str | None) -> tuple[list[dict], list[str]]:
     actions: list[dict] = []
     feedback: list[str] = []
@@ -1111,7 +994,11 @@ def tool_setup_feedback(results: list[dict], error: str | None) -> tuple[list[di
         return actions, feedback
 
     failed_result = next((result for result in results if result.get("status") == "failed"), None)
-    tool_id = str(failed_result.get("id", "deterministic-tool-gate")) if isinstance(failed_result, dict) else "deterministic-tool-gate"
+    tool_id = (
+        str(failed_result.get("id", "deterministic-tool-gate"))
+        if isinstance(failed_result, dict)
+        else "deterministic-tool-gate"
+    )
     title = f"Deterministic tool gate failed for {tool_id}"
     action = error
     if isinstance(failed_result, dict):
@@ -1147,7 +1034,11 @@ def tool_review_feedback(results: list[dict], error: str | None) -> tuple[list[d
         return actions, feedback
 
     failed_result = next((result for result in results if result.get("status") == "failed"), None)
-    tool_id = str(failed_result.get("id", "deterministic-tool-gate")) if isinstance(failed_result, dict) else "deterministic-tool-gate"
+    tool_id = (
+        str(failed_result.get("id", "deterministic-tool-gate"))
+        if isinstance(failed_result, dict)
+        else "deterministic-tool-gate"
+    )
     title = f"Review gate failed for {tool_id}"
     action = error
     if isinstance(failed_result, dict):
@@ -1248,7 +1139,7 @@ def run_bootstrap_with_status(*, target: Path, harness: str, name: str) -> Boots
     print(_color("=================", CYAN))
     print(f"Harness: {harness}")
     print(f"Target: {target}")
-    print("")
+    print()
 
     for artifact in artifacts:
         relative = artifact.path.relative_to(target)
@@ -1272,7 +1163,7 @@ def run_bootstrap_with_status(*, target: Path, harness: str, name: str) -> Boots
             sys.stdout.write(f"\r{_color(CHECKMARK, GREEN)} {_color('Created', BLUE)} `{relative}`{' ' * 20}\n")
         sys.stdout.flush()
 
-    print("")
+    print()
     print(colorize_console_block(render_bootstrap_result(result, harness=harness, name=name, wizard_started=False)))
     return result
 
@@ -1316,10 +1207,10 @@ def render_bootstrap_result(result: BootstrapResult, *, harness: str, name: str,
 def pause_for_acknowledgement(message: str) -> None:
     if not sys.stdin.isatty() or not sys.stdout.isatty():
         return
-    print("")
+    print()
     print(_color("=" * 72, CYAN))
     print(_color(message.strip(), f"{BOLD}{GREEN}"))
-    print("")
+    print()
     print(_color(">>> Press Enter to continue <<<", f"{BOLD}{MAGENTA}"))
     print(_color("=" * 72, CYAN))
     input()
