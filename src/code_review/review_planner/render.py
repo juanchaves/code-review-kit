@@ -1,12 +1,40 @@
 from __future__ import annotations
 
 from .catalog import Pack, Persona, Strategy, ToolPack
-from .init import render_tool_setup_results
+from .init import platform_label
 from .plugins.execution import build_default_execution_registry
 from .plugins.governance import build_default_governance_registry
-from .plugins.sandbox import build_default_sandbox_registry
 from .plugins.providers import build_default_provider_registry
+from .plugins.sandbox import build_default_sandbox_registry
 from .token_strategy import TOKEN_PROFILES
+
+
+def render_tool_setup_results(results: list[dict]) -> str:
+    lines = [
+        "## Tool setup execution",
+        "",
+        f"Platform: {platform_label()}",
+        "",
+    ]
+    if not results:
+        lines.append("No selected tool packs required setup.")
+        return "\n".join(lines) + "\n"
+
+    for result in results:
+        lines.append(f"- **{result['id']}**: {result['status']}")
+        for step in result.get("steps", []):
+            status = step.get("status", "passed")
+            prefix = (
+                "setup"
+                if step.get("kind") == "setup"
+                else "verify"
+                if step.get("kind") == "verify"
+                else "review"
+                if step.get("kind") == "review"
+                else "prereq"
+            )
+            lines.append(f"  - {prefix}: `{step.get('text', '')}` ({status})")
+    return "\n".join(lines) + "\n"
 
 
 def to_markdown(plan: dict) -> str:
@@ -207,9 +235,7 @@ def to_markdown(plan: dict) -> str:
         lines.append("- Derived requirements:")
         if requirements:
             for item in requirements:
-                lines.append(
-                    f"  - [{item['id']}] ({item['source']}/{item['confidence']}) {item['text']}"
-                )
+                lines.append(f"  - [{item['id']}] ({item['source']}/{item['confidence']}) {item['text']}")
         else:
             lines.append("  - none")
     migration_notes = plan.get("migration_notes", [])
