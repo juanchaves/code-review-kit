@@ -29,6 +29,8 @@ Run commands from this repository root. If you are in another repository, run:
 uv run --directory /path/to/code-review-kit crk init --harness copilot --target "$PWD"
 ```
 
+`code-review` is the canonical CLI command. `crk` is kept as a short alias.
+
 Install the repo bootstrap files:
 
 ```bash
@@ -39,6 +41,12 @@ Initialize and launch the wizard:
 
 ```bash
 uv run crk init --harness copilot --target .
+```
+
+One-shot init + review:
+
+```bash
+uv run code-review run . --pr 123
 ```
 
 After setup succeeds, `init` can start the review workflow immediately:
@@ -79,7 +87,7 @@ During setup, choose how deterministic tool commands are approved:
 # Prompt before each setup command (persists in state)
 uv run crk init --harness copilot --target . --tool-approval prompt
 
-# Auto-allow selected setup commands (default)
+# Auto-allow selected setup commands (default; `auto` alias is supported)
 uv run crk init --harness copilot --target . --tool-approval allow-selected
 
 # Reset remembered approvals and start clean
@@ -118,6 +126,8 @@ uv run crk . \
   --cache-mode context \
   --emit markdown
 ```
+
+`--tools` and `--strategies` accept comma-separated values and repeatable flags (for example: `--tools a --tools b`).
 
 Generate a plan with requirements-compliance context for review-only flows:
 

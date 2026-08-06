@@ -9,6 +9,7 @@ applyTo: "**/*"
 - Prefer deterministic gates before parallel subagent review.
 - Use two review axes: standards compliance and spec/requirements compliance.
 - Favor evidence-based findings with file+line references and concrete remediation.
+- For Azure DevOps tasks, prefer the `azure-devops-cli` skill/agent path before raw `az` commands.
 - For harness runs started via `/agent code-review` (or equivalent), auto-start review on the current repository.
 - Treat selected-tool execution as mandatory: if required tools were skipped, surface that as an explicit failure.
 - After review, provide exactly two completion choices: post actionable PR comments (when PR exists) or generate an implementation plan.

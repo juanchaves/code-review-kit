@@ -23,7 +23,9 @@ def extract_markdown_bullets(text: str) -> list[str]:
     for line in lines:
         lowered = line.lower().strip()
         if lowered.startswith("#"):
-            in_requirements_region = any(token in lowered for token in ("requirement", "acceptance", "behavior", "scope"))
+            in_requirements_region = any(
+                token in lowered for token in ("requirement", "acceptance", "behavior", "scope")
+            )
             continue
         candidate = ""
         if lowered.startswith(("- ", "* ", "+ ")):
@@ -60,7 +62,14 @@ class PrProviderPlugin(Protocol):
 
     def detect_pull_request(self, *, review_target: Path, pr_ref: str | None = None) -> dict | None: ...
 
-    def publish_comment(self, *, review_target: Path, pull_request: dict, body: str) -> str: ...
+    def publish_comment(
+        self,
+        *,
+        review_target: Path,
+        pull_request: dict,
+        body: str,
+        line_comments: list[dict] | None = None,
+    ) -> str: ...
 
 
 def provider_from_git_remote(target: Path) -> str | None:
@@ -83,7 +92,9 @@ def provider_from_git_remote(target: Path) -> str | None:
     return None
 
 
-def _run_json_command(command: list[str], *, missing_tool_note: str, failed_note: str, cwd: Path | None = None) -> tuple[dict | list | None, str | None]:
+def _run_json_command(
+    command: list[str], *, missing_tool_note: str, failed_note: str, cwd: Path | None = None
+) -> tuple[dict | list | None, str | None]:
     try:
         completed = subprocess.run(
             command,
@@ -118,7 +129,11 @@ class GitHubIssueProvider:
         body = payload.get("body", "")
         title = payload.get("title", "")
         if not isinstance(body, str):
-            return IssueProviderResult(provider_id=self.id, requirements=[], note="GitHub issue body format was invalid; issue-derived requirements were skipped.")
+            return IssueProviderResult(
+                provider_id=self.id,
+                requirements=[],
+                note="GitHub issue body format was invalid; issue-derived requirements were skipped.",
+            )
         items = extract_markdown_bullets(body)
         if not items and isinstance(title, str) and normalize_text(title):
             items = [title]
@@ -141,7 +156,11 @@ class AdoIssueProvider:
     def read_requirements(self, issue_ref: str, *, target: Path) -> IssueProviderResult:
         work_item_id = extract_ado_work_item_id(issue_ref)
         if not work_item_id:
-            return IssueProviderResult(provider_id=self.id, requirements=[], note="ADO issue reference must be a numeric work item id or work item URL.")
+            return IssueProviderResult(
+                provider_id=self.id,
+                requirements=[],
+                note="ADO issue reference must be a numeric work item id or work item URL.",
+            )
         payload, note = _run_json_command(
             ["az", "boards", "work-item", "show", "--id", work_item_id, "--output", "json"],
             missing_tool_note="Azure CLI not available; ADO issue-derived requirements were skipped.",
@@ -152,7 +171,11 @@ class AdoIssueProvider:
             return IssueProviderResult(provider_id=self.id, requirements=[], note=note)
         fields = payload.get("fields", {})
         if not isinstance(fields, dict):
-            return IssueProviderResult(provider_id=self.id, requirements=[], note="ADO issue payload was invalid; issue-derived requirements were skipped.")
+            return IssueProviderResult(
+                provider_id=self.id,
+                requirements=[],
+                note="ADO issue payload was invalid; issue-derived requirements were skipped.",
+            )
         description = fields.get("System.Description", "")
         title = fields.get("System.Title", "")
         text = strip_html(description) if isinstance(description, str) else ""
@@ -287,7 +310,14 @@ class GitHubPrProvider:
             return None
         return {**payload, "provider": self.id}
 
-    def publish_comment(self, *, review_target: Path, pull_request: dict, body: str) -> str:
+    def publish_comment(
+        self,
+        *,
+        review_target: Path,
+        pull_request: dict,
+        body: str,
+        line_comments: list[dict] | None = None,
+    ) -> str:
         completed = subprocess.run(
             ["gh", "pr", "comment", str(pull_request["number"]), "--body", body],
             cwd=review_target,
@@ -364,54 +394,177 @@ class AdoPrProvider:
             "repository_id": repo_id,
         }
 
-    def publish_comment(self, *, review_target: Path, pull_request: dict, body: str) -> str:
-        project = pull_request.get("project")
-        repository_id = pull_request.get("repository_id")
-        if not isinstance(project, str) or not project.strip() or not isinstance(repository_id, str) or not repository_id.strip():
-            raise ValueError("Unable to resolve ADO PR repository/project context for comment publication.")
-        thread_payload = {
-            "comments": [{"parentCommentId": 0, "content": body, "commentType": 1}],
-            "status": "active",
-        }
-        with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as thread_handle:
-            json.dump(thread_payload, thread_handle)
-            thread_path = Path(thread_handle.name)
+    def _latest_iteration_id(self, *, review_target: Path, pull_request: dict) -> int | None:
         command = [
             "az",
-            "devops",
-            "invoke",
-            "--area",
-            "git",
-            "--resource",
-            "pullRequestThreads",
-            "--route-parameters",
-            f"project={project}",
-            f"repositoryId={repository_id}",
-            f"pullRequestId={pull_request['number']}",
-            "--http-method",
-            "POST",
-            "--api-version",
-            "7.1",
-            "--in-file",
-            str(thread_path),
+            "repos",
+            "pr",
+            "iteration",
+            "list",
+            "--id",
+            str(pull_request["number"]),
             "--output",
             "json",
         ]
         if isinstance(pull_request.get("organization"), str) and pull_request["organization"].strip():
             command.extend(["--org", pull_request["organization"]])
-        try:
-            completed = subprocess.run(
-                command,
-                cwd=review_target,
-                check=False,
-                capture_output=True,
-                text=True,
+        payload, note = _run_json_command(
+            command,
+            missing_tool_note="Azure CLI not available.",
+            failed_note="ADO iteration lookup failed.",
+            cwd=review_target,
+        )
+        if note or not isinstance(payload, list):
+            return None
+        ids = [item.get("id") for item in payload if isinstance(item, dict) and isinstance(item.get("id"), int)]
+        if not ids:
+            return None
+        return max(ids)
+
+    def _change_tracking_by_path(self, *, review_target: Path, pull_request: dict, iteration_id: int) -> dict[str, int]:
+        command = [
+            "az",
+            "repos",
+            "pr",
+            "iteration",
+            "changes",
+            "list",
+            "--id",
+            str(pull_request["number"]),
+            "--iteration-id",
+            str(iteration_id),
+            "--output",
+            "json",
+        ]
+        if isinstance(pull_request.get("organization"), str) and pull_request["organization"].strip():
+            command.extend(["--org", pull_request["organization"]])
+        payload, note = _run_json_command(
+            command,
+            missing_tool_note="Azure CLI not available.",
+            failed_note="ADO iteration changes lookup failed.",
+            cwd=review_target,
+        )
+        if note:
+            return {}
+        changes = payload.get("changeEntries", []) if isinstance(payload, dict) else []
+        mapping: dict[str, int] = {}
+        for change in changes:
+            if not isinstance(change, dict):
+                continue
+            item = change.get("item", {})
+            path = item.get("path") if isinstance(item, dict) else None
+            tracking_id = change.get("changeTrackingId")
+            if isinstance(path, str) and path.startswith("/") and isinstance(tracking_id, int):
+                mapping[path] = tracking_id
+        return mapping
+
+    def publish_comment(
+        self,
+        *,
+        review_target: Path,
+        pull_request: dict,
+        body: str,
+        line_comments: list[dict] | None = None,
+    ) -> str:
+        project = pull_request.get("project")
+        repository_id = pull_request.get("repository_id")
+        if (
+            not isinstance(project, str)
+            or not project.strip()
+            or not isinstance(repository_id, str)
+            or not repository_id.strip()
+        ):
+            raise ValueError("Unable to resolve ADO PR repository/project context for comment publication.")
+        iteration_id = self._latest_iteration_id(review_target=review_target, pull_request=pull_request)
+        tracking_map = (
+            self._change_tracking_by_path(
+                review_target=review_target, pull_request=pull_request, iteration_id=iteration_id
             )
-        finally:
-            thread_path.unlink(missing_ok=True)
-        if completed.returncode != 0:
-            stderr = completed.stderr.strip() or completed.stdout.strip() or "unknown error"
-            raise ValueError(f"Failed to publish PR comment: {stderr}")
+            if isinstance(iteration_id, int)
+            else {}
+        )
+
+        thread_payloads: list[dict] = [
+            {
+                "comments": [{"parentCommentId": 0, "content": body, "commentType": 1}],
+                "status": 1,
+            }
+        ]
+        for item in line_comments or []:
+            if not isinstance(item, dict):
+                continue
+            file_path = item.get("file_path")
+            line = item.get("line")
+            content = item.get("content")
+            if (
+                not isinstance(file_path, str)
+                or not file_path.startswith("/")
+                or not isinstance(line, int)
+                or line < 1
+                or not isinstance(content, str)
+            ):
+                continue
+            payload = {
+                "comments": [{"parentCommentId": 0, "content": content, "commentType": 1}],
+                "status": 1,
+                "threadContext": {
+                    "filePath": file_path,
+                    "rightFileStart": {"line": line, "offset": 1},
+                    "rightFileEnd": {"line": line, "offset": 999},
+                },
+            }
+            if isinstance(iteration_id, int):
+                change_tracking_id = tracking_map.get(file_path)
+                if isinstance(change_tracking_id, int):
+                    payload["pullRequestThreadContext"] = {
+                        "changeTrackingId": change_tracking_id,
+                        "iterationContext": {
+                            "firstComparingIteration": iteration_id,
+                            "secondComparingIteration": iteration_id,
+                        },
+                    }
+            thread_payloads.append(payload)
+
+        for thread_payload in thread_payloads:
+            with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as thread_handle:
+                json.dump(thread_payload, thread_handle)
+                thread_path = Path(thread_handle.name)
+            command = [
+                "az",
+                "devops",
+                "invoke",
+                "--area",
+                "git",
+                "--resource",
+                "pullRequestThreads",
+                "--route-parameters",
+                f"project={project}",
+                f"repositoryId={repository_id}",
+                f"pullRequestId={pull_request['number']}",
+                "--http-method",
+                "POST",
+                "--api-version",
+                "7.1",
+                "--in-file",
+                str(thread_path),
+                "--output",
+                "json",
+            ]
+            if isinstance(pull_request.get("organization"), str) and pull_request["organization"].strip():
+                command.extend(["--org", pull_request["organization"]])
+            try:
+                completed = subprocess.run(
+                    command,
+                    cwd=review_target,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+            finally:
+                thread_path.unlink(missing_ok=True)
+            if completed.returncode != 0:
+                stderr = completed.stderr.strip() or completed.stdout.strip() or "unknown error"
+                raise ValueError(f"Failed to publish PR comment: {stderr}")
         return f"Posted actionable PR comment to ADO PR #{pull_request['number']}."
 
 

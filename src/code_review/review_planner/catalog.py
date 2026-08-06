@@ -516,18 +516,22 @@ TOOL_PACKS: dict[str, ToolPack] = {
     "security-osv-scanner": ToolPack(
         title="OSV-Scanner",
         purpose="Dependency vulnerability scanning with minimal setup.",
-        setup=["macOS: brew install osv-scanner; Linux/WSL: use the OSV-Scanner release binary or your distro package manager"],
+        setup=[
+            "macOS: brew install osv-scanner; Linux/WSL: use the OSV-Scanner release binary or your distro package manager"
+        ],
         commands=["osv-scanner --version"],
-        review_commands=["osv-scanner scan --lockfile=uv.lock"],
+        review_commands=["osv-scanner scan ."],
         applies_to=["security", "python", "javascript", "typescript", "shell"],
         uninstall=["brew uninstall osv-scanner"],
     ),
     "security-gitleaks": ToolPack(
         title="Gitleaks",
         purpose="Secret scanning for repos, files, and diffs.",
-        setup=["macOS: brew install gitleaks; Linux/WSL: use the Gitleaks release binary or your distro package manager"],
+        setup=[
+            "macOS: brew install gitleaks; Linux/WSL: use the Gitleaks release binary or your distro package manager"
+        ],
         commands=["gitleaks version"],
-        review_commands=["gitleaks detect --no-banner --source ."],
+        review_commands=["gitleaks detect --no-banner --source . --log-opts HEAD~1..HEAD"],
         applies_to=["security", "python", "javascript", "typescript", "shell"],
         uninstall=["brew uninstall gitleaks"],
     ),
@@ -577,7 +581,11 @@ def build_dynamic_catalog(
         title = raw.get("title")
         practices = raw.get("practices")
         file_hints = raw.get("file_hints", [])
-        if not isinstance(title, str) or not isinstance(practices, list) or not all(isinstance(p, str) for p in practices):
+        if (
+            not isinstance(title, str)
+            or not isinstance(practices, list)
+            or not all(isinstance(p, str) for p in practices)
+        ):
             raise ValueError(f"Invalid {kind} extension entry.")
         if not isinstance(file_hints, list) or not all(isinstance(h, str) for h in file_hints):
             raise ValueError(f"Invalid {kind} extension file_hints.")
@@ -621,8 +629,11 @@ def build_dynamic_catalog(
         review_commands = raw.get("review_commands", [])
         applies_to = raw.get("applies_to", [])
         uninstall = raw.get("uninstall", [])
-        if not isinstance(title, str) or not isinstance(purpose, str) or not isinstance(commands, list) or not all(
-            isinstance(item, str) for item in commands
+        if (
+            not isinstance(title, str)
+            or not isinstance(purpose, str)
+            or not isinstance(commands, list)
+            or not all(isinstance(item, str) for item in commands)
         ):
             raise ValueError("Invalid tool extension entry.")
         if not isinstance(review_commands, list) or not all(isinstance(item, str) for item in review_commands):
@@ -653,7 +664,11 @@ def build_dynamic_catalog(
             raise ValueError("Strategy extension entries must be objects.")
         title = raw.get("title")
         directives = raw.get("directives")
-        if not isinstance(title, str) or not isinstance(directives, list) or not all(isinstance(item, str) for item in directives):
+        if (
+            not isinstance(title, str)
+            or not isinstance(directives, list)
+            or not all(isinstance(item, str) for item in directives)
+        ):
             raise ValueError("Invalid strategy extension entry.")
         strategies[key] = Strategy(title=title, directives=directives)
 

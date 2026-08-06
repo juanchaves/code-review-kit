@@ -70,27 +70,107 @@ def _add_arguments(parser: argparse.ArgumentParser, items: list[tuple[str, dict]
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Compose a multi-persona code review plan.")
+    parser = argparse.ArgumentParser(description="Compose a multi-persona code review plan (code-review; alias: crk).")
     subparsers = parser.add_subparsers(dest="command")
 
     review = subparsers.add_parser("review", help="Generate a review plan.")
     _add_arguments(
         review,
         [
-            ("target", {"type": Path, "help": "Target repository path or scope identifier."}),
+            (
+                "target",
+                {
+                    "type": Path,
+                    "nargs": "?",
+                    "default": Path.cwd(),
+                    "help": "Target repository path or scope identifier.",
+                },
+            ),
             ("--config", {"type": Path, "help": "JSON profile with selections and optional extensions."}),
-            ("--personas", {"default": "", "help": "Comma-separated persona IDs."}),
-            ("--exclude-personas", {"default": "", "help": "Comma-separated persona IDs to exclude."}),
-            ("--baselines", {"default": "", "help": "Comma-separated baseline pack IDs."}),
-            ("--exclude-baselines", {"default": "", "help": "Comma-separated baseline pack IDs to exclude."}),
-            ("--tools", {"default": "", "help": "Comma-separated tool pack IDs."}),
-            ("--exclude-tools", {"default": "", "help": "Comma-separated tool pack IDs to exclude."}),
-            ("--languages", {"default": "", "help": "Comma-separated language pack IDs."}),
-            ("--exclude-languages", {"default": "", "help": "Comma-separated language pack IDs to exclude."}),
-            ("--specialties", {"default": "", "help": "Comma-separated specialty pack IDs."}),
-            ("--exclude-specialties", {"default": "", "help": "Comma-separated specialty pack IDs to exclude."}),
-            ("--strategies", {"default": "", "help": "Comma-separated strategy IDs."}),
-            ("--exclude-strategies", {"default": "", "help": "Comma-separated strategy IDs to exclude."}),
+            (
+                "--personas",
+                {"action": "append", "default": [], "help": "Persona IDs (repeat flag or use comma-separated IDs)."},
+            ),
+            (
+                "--exclude-personas",
+                {
+                    "action": "append",
+                    "default": [],
+                    "help": "Persona IDs to exclude (repeat flag or use comma-separated IDs).",
+                },
+            ),
+            (
+                "--baselines",
+                {
+                    "action": "append",
+                    "default": [],
+                    "help": "Baseline pack IDs (repeat flag or use comma-separated IDs).",
+                },
+            ),
+            (
+                "--exclude-baselines",
+                {
+                    "action": "append",
+                    "default": [],
+                    "help": "Baseline pack IDs to exclude (repeat flag or use comma-separated IDs).",
+                },
+            ),
+            (
+                "--tools",
+                {"action": "append", "default": [], "help": "Tool pack IDs (repeat flag or use comma-separated IDs)."},
+            ),
+            (
+                "--exclude-tools",
+                {
+                    "action": "append",
+                    "default": [],
+                    "help": "Tool pack IDs to exclude (repeat flag or use comma-separated IDs).",
+                },
+            ),
+            (
+                "--languages",
+                {
+                    "action": "append",
+                    "default": [],
+                    "help": "Language pack IDs (repeat flag or use comma-separated IDs).",
+                },
+            ),
+            (
+                "--exclude-languages",
+                {
+                    "action": "append",
+                    "default": [],
+                    "help": "Language pack IDs to exclude (repeat flag or use comma-separated IDs).",
+                },
+            ),
+            (
+                "--specialties",
+                {
+                    "action": "append",
+                    "default": [],
+                    "help": "Specialty pack IDs (repeat flag or use comma-separated IDs).",
+                },
+            ),
+            (
+                "--exclude-specialties",
+                {
+                    "action": "append",
+                    "default": [],
+                    "help": "Specialty pack IDs to exclude (repeat flag or use comma-separated IDs).",
+                },
+            ),
+            (
+                "--strategies",
+                {"action": "append", "default": [], "help": "Strategy IDs (repeat flag or use comma-separated IDs)."},
+            ),
+            (
+                "--exclude-strategies",
+                {
+                    "action": "append",
+                    "default": [],
+                    "help": "Strategy IDs to exclude (repeat flag or use comma-separated IDs).",
+                },
+            ),
             (
                 "--strategy-mode",
                 {
@@ -99,21 +179,60 @@ def build_parser() -> argparse.ArgumentParser:
                     "help": "overlay: same strategies on each persona, fanout: persona x strategy units.",
                 },
             ),
-            ("--token-profile", {"choices": sorted(TOKEN_PROFILES), "default": "balanced", "help": "Token optimization preset."}),
+            (
+                "--token-profile",
+                {"choices": sorted(TOKEN_PROFILES), "default": "balanced", "help": "Token optimization preset."},
+            ),
             ("--cache-mode", {"choices": ["none", "prompt", "context", "full"], "help": "Caching aggressiveness."}),
             ("--model-routing", {"choices": ["right-size", "fixed"], "help": "Subagent model routing mode."}),
             ("--max-parallel-units", {"type": int, "help": "Max concurrent subagent units."}),
             ("--max-files-per-unit", {"type": int, "help": "Guidance cap for files per unit."}),
             ("--max-file-hints", {"type": int, "help": "Max file hint globs per unit after TOON narrowing."}),
             ("--emit", {"choices": ["markdown", "json"], "default": "markdown", "help": "Output format."}),
-            ("-v", {"dest": "verbose", "action": "count", "default": 0, "help": "Increase verbosity (use -vvv for full plan output)."}),
-            ("--list-catalog", {"action": "store_true", "help": "List available personas, packs, strategies, and profiles."}),
+            (
+                "-v",
+                {
+                    "dest": "verbose",
+                    "action": "count",
+                    "default": 0,
+                    "help": "Increase verbosity (use -vvv for full plan output).",
+                },
+            ),
+            (
+                "--list-catalog",
+                {"action": "store_true", "help": "List available personas, packs, strategies, and profiles."},
+            ),
             ("--wizard", {"action": "store_true", "help": "Run an interactive TUI wizard to choose review options."}),
-            ("--requirements-check", {"action": "store_true", "help": "Derive requirements from issue/docs/tests/user input and include compliance context in the plan."}),
+            (
+                "--requirements-check",
+                {
+                    "action": "store_true",
+                    "help": "Derive requirements from issue/docs/tests/user input and include compliance context in the plan.",
+                },
+            ),
             ("--requirements-issue", {"help": "Issue reference for requirements derivation (for example: '#123')."}),
-            ("--issue-provider", {"choices": ["auto", "github", "ado", "jira"], "default": "auto", "help": "Issue provider for requirements derivation."}),
-            ("--requirements", {"default": "", "help": "Comma-separated user-provided requirements to include in requirements derivation."}),
-            ("--requirements-walkthrough", {"action": "store_true", "help": "Run an interactive walkthrough to confirm and edit derived requirements."}),
+            (
+                "--issue-provider",
+                {
+                    "choices": ["auto", "github", "ado", "jira"],
+                    "default": "auto",
+                    "help": "Issue provider for requirements derivation.",
+                },
+            ),
+            (
+                "--requirements",
+                {
+                    "default": "",
+                    "help": "Comma-separated user-provided requirements to include in requirements derivation.",
+                },
+            ),
+            (
+                "--requirements-walkthrough",
+                {
+                    "action": "store_true",
+                    "help": "Run an interactive walkthrough to confirm and edit derived requirements.",
+                },
+            ),
             (
                 "--requirements-refiner",
                 {
@@ -122,15 +241,60 @@ def build_parser() -> argparse.ArgumentParser:
                     "help": "Interactive requirements refinement mode used with --requirements-walkthrough.",
                 },
             ),
-            ("--base-ref", {"default": "", "help": "Optional git base ref (commit/branch/tag) for review-scope preflight via <base>...HEAD."}),
-            ("--learn-best-practice", {"action": "append", "default": [], "help": "Add a learned best-practice item to the repo-local learnings pack (repeatable)."}),
-            ("--feedback-status", {"action": "append", "default": [], "help": "Update feedback state using <feedback_id>:<status> (status: open|in_progress|accepted|dismissed|done)."}),
-            ("--provider", {"choices": ["auto", "github", "ado", "jira"], "default": "auto", "help": "Preferred provider for integrations and provider registry selection."}),
-            ("--execution-plugin", {"default": "shell-local", "help": "Execution plugin id for setup/review deterministic gate execution."}),
-            ("--execution-fallback-plugin", {"default": "", "help": "Fallback execution plugin id if the primary execution plugin fails."}),
-            ("--sandbox-plugin", {"default": "scratch-home", "help": "Sandbox plugin id for isolated command execution state."}),
-            ("--sandbox-fallback-plugin", {"default": "passthrough", "help": "Fallback sandbox plugin id if the primary sandbox plugin fails."}),
-            ("--governance-plugin", {"default": "strict-human-approval", "help": "Governance plugin id controlling side-effect approvals."}),
+            (
+                "--base-ref",
+                {
+                    "default": "",
+                    "help": "Optional git base ref (commit/branch/tag) for review-scope preflight via <base>...HEAD.",
+                },
+            ),
+            (
+                "--learn-best-practice",
+                {
+                    "action": "append",
+                    "default": [],
+                    "help": "Add a learned best-practice item to the repo-local learnings pack (repeatable).",
+                },
+            ),
+            (
+                "--feedback-status",
+                {
+                    "action": "append",
+                    "default": [],
+                    "help": "Update feedback state using <feedback_id>:<status> (status: open|in_progress|accepted|dismissed|done).",
+                },
+            ),
+            (
+                "--provider",
+                {
+                    "choices": ["auto", "github", "ado", "jira"],
+                    "default": "auto",
+                    "help": "Preferred provider for integrations and provider registry selection.",
+                },
+            ),
+            (
+                "--execution-plugin",
+                {
+                    "default": "shell-local",
+                    "help": "Execution plugin id for setup/review deterministic gate execution.",
+                },
+            ),
+            (
+                "--execution-fallback-plugin",
+                {"default": "", "help": "Fallback execution plugin id if the primary execution plugin fails."},
+            ),
+            (
+                "--sandbox-plugin",
+                {"default": "scratch-home", "help": "Sandbox plugin id for isolated command execution state."},
+            ),
+            (
+                "--sandbox-fallback-plugin",
+                {"default": "passthrough", "help": "Fallback sandbox plugin id if the primary sandbox plugin fails."},
+            ),
+            (
+                "--governance-plugin",
+                {"default": "strict-human-approval", "help": "Governance plugin id controlling side-effect approvals."},
+            ),
             (
                 "--learn-accepted-feedback",
                 {
@@ -168,11 +332,22 @@ def build_parser() -> argparse.ArgumentParser:
     _add_arguments(
         install,
         [
-            ("--harness", {"choices": ["copilot", "claude-code", "opencode"], "required": True, "help": "Target harness."}),
+            (
+                "--harness",
+                {"choices": ["copilot", "claude-code", "opencode"], "required": True, "help": "Target harness."},
+            ),
             ("--name", {"default": "crk", "help": "Installed command name if you need to rename it."}),
             ("--target", {"type": Path, "default": Path.cwd(), "help": "Repository to bootstrap."}),
             ("--emit", {"choices": ["markdown", "json"], "default": "markdown", "help": "Output format."}),
-            ("-v", {"dest": "verbose", "action": "count", "default": 0, "help": "Increase verbosity (use -vvv for full plan output)."}),
+            (
+                "-v",
+                {
+                    "dest": "verbose",
+                    "action": "count",
+                    "default": 0,
+                    "help": "Increase verbosity (use -vvv for full plan output).",
+                },
+            ),
             ("--preview", {"action": "store_true", "help": "Show the planned bootstrap without writing files."}),
         ],
     )
@@ -181,7 +356,10 @@ def build_parser() -> argparse.ArgumentParser:
     _add_arguments(
         init,
         [
-            ("--harness", {"choices": ["copilot", "claude-code", "opencode"], "required": True, "help": "Target harness."}),
+            (
+                "--harness",
+                {"choices": ["copilot", "claude-code", "opencode"], "required": True, "help": "Target harness."},
+            ),
             ("--name", {"default": "crk", "help": "Installed command name if you need to rename it."}),
             ("--target", {"type": Path, "default": Path.cwd(), "help": "Repository to bootstrap and review."}),
             ("--state-file", {"type": Path, "help": "Path to persisted wizard selections."}),
@@ -191,8 +369,8 @@ def build_parser() -> argparse.ArgumentParser:
             (
                 "--tool-approval",
                 {
-                    "choices": ["prompt", "allow-selected"],
-                    "help": "Setup command approval mode: prompt per command or auto-allow selected tool commands.",
+                    "choices": ["prompt", "allow-selected", "auto"],
+                    "help": "Setup command approval mode: prompt per command or auto/allow-selected to auto-approve selected tool commands.",
                 },
             ),
             (
@@ -219,6 +397,13 @@ def build_parser() -> argparse.ArgumentParser:
                 },
             ),
             (
+                "--start-pr-review",
+                {
+                    "action": "store_true",
+                    "help": "Shorthand for --post-init-action start --post-init-workflow pr-review.",
+                },
+            ),
+            (
                 "--pr",
                 {
                     "default": "",
@@ -233,12 +418,37 @@ def build_parser() -> argparse.ArgumentParser:
                     "help": "After review, ask to comment on the active PR, publish a comment, generate a plan, or skip the action.",
                 },
             ),
-            ("--provider", {"choices": ["auto", "github", "ado", "jira"], "default": "auto", "help": "Preferred provider for integrations and provider registry selection."}),
-            ("--execution-plugin", {"default": "shell-local", "help": "Execution plugin id for setup/review deterministic gate execution."}),
-            ("--execution-fallback-plugin", {"default": "", "help": "Fallback execution plugin id if the primary execution plugin fails."}),
-            ("--sandbox-plugin", {"default": "scratch-home", "help": "Sandbox plugin id for isolated command execution state."}),
-            ("--sandbox-fallback-plugin", {"default": "passthrough", "help": "Fallback sandbox plugin id if the primary sandbox plugin fails."}),
-            ("--governance-plugin", {"default": "strict-human-approval", "help": "Governance plugin id controlling side-effect approvals."}),
+            (
+                "--provider",
+                {
+                    "choices": ["auto", "github", "ado", "jira"],
+                    "default": "auto",
+                    "help": "Preferred provider for integrations and provider registry selection.",
+                },
+            ),
+            (
+                "--execution-plugin",
+                {
+                    "default": "shell-local",
+                    "help": "Execution plugin id for setup/review deterministic gate execution.",
+                },
+            ),
+            (
+                "--execution-fallback-plugin",
+                {"default": "", "help": "Fallback execution plugin id if the primary execution plugin fails."},
+            ),
+            (
+                "--sandbox-plugin",
+                {"default": "scratch-home", "help": "Sandbox plugin id for isolated command execution state."},
+            ),
+            (
+                "--sandbox-fallback-plugin",
+                {"default": "passthrough", "help": "Fallback sandbox plugin id if the primary sandbox plugin fails."},
+            ),
+            (
+                "--governance-plugin",
+                {"default": "strict-human-approval", "help": "Governance plugin id controlling side-effect approvals."},
+            ),
         ],
     )
     init.add_argument(
@@ -260,10 +470,88 @@ def build_parser() -> argparse.ArgumentParser:
     _add_arguments(
         uninstall,
         [
-            ("--harness", {"choices": ["copilot", "claude-code", "opencode"], "required": True, "help": "Target harness."}),
+            (
+                "--harness",
+                {"choices": ["copilot", "claude-code", "opencode"], "required": True, "help": "Target harness."},
+            ),
             ("--name", {"default": "crk", "help": "Installed command name."}),
             ("--target", {"type": Path, "default": Path.cwd(), "help": "Repository to remove bootstrap from."}),
             ("--emit", {"choices": ["markdown", "json"], "default": "markdown", "help": "Output format."}),
+        ],
+    )
+
+    run = subparsers.add_parser("run", help="One-shot init + review workflow.")
+    _add_arguments(
+        run,
+        [
+            (
+                "target",
+                {"type": Path, "nargs": "?", "default": Path.cwd(), "help": "Repository to bootstrap and review."},
+            ),
+            (
+                "--harness",
+                {"choices": ["copilot", "claude-code", "opencode"], "default": "copilot", "help": "Target harness."},
+            ),
+            ("--name", {"default": "crk", "help": "Installed command name if you need to rename it."}),
+            ("--state-file", {"type": Path, "help": "Path to persisted wizard selections."}),
+            ("--emit", {"choices": ["markdown", "json"], "default": "markdown", "help": "Output format."}),
+            (
+                "--tool-approval",
+                {"choices": ["prompt", "allow-selected", "auto"], "help": "Setup command approval mode."},
+            ),
+            (
+                "--reset-tool-approvals",
+                {"action": "store_true", "help": "Clear previously approved setup commands before running setup."},
+            ),
+            ("--pr", {"default": "", "help": "PR number or URL for PR-focused review/comment publishing."}),
+            (
+                "--post-review-action",
+                {
+                    "choices": ["ask", "comment", "plan", "skip"],
+                    "default": "ask",
+                    "help": "After review, ask to comment, publish comment, generate plan, or skip.",
+                },
+            ),
+            (
+                "--provider",
+                {
+                    "choices": ["auto", "github", "ado", "jira"],
+                    "default": "auto",
+                    "help": "Preferred provider for integrations and provider registry selection.",
+                },
+            ),
+            (
+                "--execution-plugin",
+                {
+                    "default": "shell-local",
+                    "help": "Execution plugin id for setup/review deterministic gate execution.",
+                },
+            ),
+            (
+                "--execution-fallback-plugin",
+                {"default": "", "help": "Fallback execution plugin id if the primary execution plugin fails."},
+            ),
+            (
+                "--sandbox-plugin",
+                {"default": "scratch-home", "help": "Sandbox plugin id for isolated command execution state."},
+            ),
+            (
+                "--sandbox-fallback-plugin",
+                {"default": "passthrough", "help": "Fallback sandbox plugin id if the primary sandbox plugin fails."},
+            ),
+            (
+                "--governance-plugin",
+                {"default": "strict-human-approval", "help": "Governance plugin id controlling side-effect approvals."},
+            ),
+            (
+                "-v",
+                {
+                    "dest": "verbose",
+                    "action": "count",
+                    "default": 0,
+                    "help": "Increase verbosity (use -vvv for full plan output).",
+                },
+            ),
         ],
     )
 
@@ -272,7 +560,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     args = list(sys.argv[1:] if argv is None else argv)
-    if args and args[0] not in {"review", "install", "init", "uninstall"} and not args[0].startswith("-"):
+    if args and args[0] not in {"review", "install", "init", "uninstall", "run"} and not args[0].startswith("-"):
         args = ["review", *args]
     return build_parser().parse_args(args)
 
@@ -311,6 +599,9 @@ def handle_uninstall_command(args: argparse.Namespace) -> int:
 
 def handle_install_or_init_command(args: argparse.Namespace) -> int:
     target = _resolve_target_path(args.target)
+    if bool(getattr(args, "start_pr_review", False)):
+        args.post_init_action = "start"
+        args.post_init_workflow = "pr-review"
     if args.preview:
         rendered = render_init_plan(harness=args.harness, name=args.name, emit=args.emit)
         print(colorize_console_block(rendered) if args.emit == "markdown" else rendered)
@@ -400,7 +691,9 @@ def handle_install_or_init_command(args: argparse.Namespace) -> int:
         strategy_mode="overlay",
     )
     plan["setup_tool_policy"] = setup_tool_policy
-    save_state(state_path=state_path, payload=extract_state_payload(harness=args.harness, command_name=args.name, plan=plan))
+    save_state(
+        state_path=state_path, payload=extract_state_payload(harness=args.harness, command_name=args.name, plan=plan)
+    )
     sandbox_registry = build_default_sandbox_registry()
     sandbox_plugin = sandbox_registry.resolve(getattr(args, "sandbox_plugin", "scratch-home"))
     try:
@@ -438,7 +731,9 @@ def handle_install_or_init_command(args: argparse.Namespace) -> int:
         else:
             raise
     plan["setup_tool_policy"] = setup_tool_policy
-    save_state(state_path=state_path, payload=extract_state_payload(harness=args.harness, command_name=args.name, plan=plan))
+    save_state(
+        state_path=state_path, payload=extract_state_payload(harness=args.harness, command_name=args.name, plan=plan)
+    )
     show_setup_summary(plan=plan, tool_setup_results=tool_setup_results, tool_setup_error=tool_setup_error)
     if tool_setup_error:
         return 1
@@ -457,7 +752,9 @@ def handle_install_or_init_command(args: argparse.Namespace) -> int:
                 command_results = run_uninstall_commands(uninstall_commands, interactive=True)
                 table = (
                     "| Tool | Command | Exit |\n|---|---|---|\n"
-                    + "\n".join(f"| `{tool_id}` | `{command}` | `{code}` |" for tool_id, command, code in command_results)
+                    + "\n".join(
+                        f"| `{tool_id}` | `{command}` | `{code}` |" for tool_id, command, code in command_results
+                    )
                     + ("\n" if command_results else "| (none) | - | - |\n")
                 )
                 print(table)
@@ -501,20 +798,107 @@ def handle_install_or_init_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def _build_review_args_from_run_args(*, run_args: argparse.Namespace, target: Path) -> argparse.Namespace:
+    return argparse.Namespace(
+        command="review",
+        target=target,
+        config=None,
+        personas=[],
+        exclude_personas=[],
+        baselines=[],
+        exclude_baselines=[],
+        tools=[],
+        exclude_tools=[],
+        languages=[],
+        exclude_languages=[],
+        specialties=[],
+        exclude_specialties=[],
+        strategies=[],
+        exclude_strategies=[],
+        strategy_mode="overlay",
+        token_profile="balanced",
+        cache_mode=None,
+        model_routing=None,
+        max_parallel_units=None,
+        max_files_per_unit=None,
+        max_file_hints=None,
+        emit=getattr(run_args, "emit", "markdown"),
+        verbose=getattr(run_args, "verbose", 0),
+        list_catalog=False,
+        wizard=False,
+        requirements_check=False,
+        requirements_issue=None,
+        issue_provider="auto",
+        requirements="",
+        requirements_walkthrough=False,
+        requirements_refiner="manual",
+        base_ref="",
+        learn_best_practice=[],
+        feedback_status=[],
+        provider=getattr(run_args, "provider", "auto"),
+        execution_plugin=getattr(run_args, "execution_plugin", "shell-local"),
+        execution_fallback_plugin=getattr(run_args, "execution_fallback_plugin", ""),
+        sandbox_plugin=getattr(run_args, "sandbox_plugin", "scratch-home"),
+        sandbox_fallback_plugin=getattr(run_args, "sandbox_fallback_plugin", "passthrough"),
+        governance_plugin=getattr(run_args, "governance_plugin", "strict-human-approval"),
+        learn_accepted_feedback=False,
+        learn_feedback_id=[],
+        pr=getattr(run_args, "pr", ""),
+        post_review_action=getattr(run_args, "post_review_action", "ask"),
+    )
+
+
+def handle_run_command(args: argparse.Namespace) -> int:
+    target = _resolve_target_path(args.target)
+    state_path = _resolve_target_path(args.state_file) if args.state_file else default_state_path(target=target)
+    previous_state = load_state(state_path) if state_path.exists() else {}
+    setup_tool_policy = resolve_setup_tool_policy(
+        previous_state=previous_state,
+        requested_mode=getattr(args, "tool_approval", None),
+        reset_approvals=bool(getattr(args, "reset_tool_approvals", False)),
+    )
+    state_payload = dict(previous_state) if isinstance(previous_state, dict) else {}
+    state_payload["schema_version"] = CURRENT_SCHEMA_VERSION
+    state_payload["harness"] = args.harness
+    state_payload["command_name"] = args.name
+    state_payload["setup_tool_policy"] = setup_tool_policy
+    save_state(state_path=state_path, payload=state_payload)
+    if args.emit == "json":
+        apply_bootstrap(target=target, name=args.name)
+    else:
+        run_bootstrap_with_status(target=target, harness=args.harness, name=args.name)
+    review_args = _build_review_args_from_run_args(run_args=args, target=target)
+    review_args.setup_tool_policy = setup_tool_policy
+    return handle_review_command(review_args)
+
+
+def _parse_selection_values(raw: object) -> list[str]:
+    if isinstance(raw, str):
+        tokens = [raw]
+    elif isinstance(raw, list):
+        tokens = [item for item in raw if isinstance(item, str)]
+    else:
+        return []
+    values: list[str] = []
+    for token in tokens:
+        values.extend(parse_csv(token))
+    return values
+
+
 def _build_cli_inputs(args: argparse.Namespace) -> dict[str, list[str]]:
     return {
-        "personas": parse_csv(args.personas),
-        "exclude_personas": parse_csv(args.exclude_personas),
-        "baselines": parse_csv(args.baselines),
-        "exclude_baselines": parse_csv(args.exclude_baselines),
-        "tools": parse_csv(args.tools),
-        "exclude_tools": parse_csv(args.exclude_tools),
-        "languages": parse_csv(args.languages),
-        "exclude_languages": parse_csv(args.exclude_languages),
-        "specialties": parse_csv(args.specialties),
-        "exclude_specialties": parse_csv(args.exclude_specialties),
-        "strategies": parse_csv(args.strategies),
-        "exclude_strategies": parse_csv(args.exclude_strategies),
+        "personas": _parse_selection_values(args.personas),
+        "exclude_personas": _parse_selection_values(args.exclude_personas),
+        "baselines": _parse_selection_values(args.baselines),
+        "exclude_baselines": _parse_selection_values(args.exclude_baselines),
+        "tools": _parse_selection_values(args.tools),
+        "exclude_tools": _parse_selection_values(args.exclude_tools),
+        "languages": _parse_selection_values(args.languages),
+        "exclude_languages": _parse_selection_values(args.exclude_languages),
+        "specialties": _parse_selection_values(args.specialties),
+        "exclude_specialties": _parse_selection_values(args.exclude_specialties),
+        "strategies": _parse_selection_values(args.strategies),
+        "exclude_strategies": _parse_selection_values(args.exclude_strategies),
     }
 
 
@@ -707,7 +1091,9 @@ def _render_context_details(plan: dict, pull_request: dict) -> list[str]:
 def _render_pr_comment_body(*, plan: dict, pull_request: dict) -> str:
     actions = [item for item in plan.get("feedback_actions", []) if isinstance(item, dict)]
     priority_weight = {"P1": 1, "P2": 2, "P3": 3}
-    actions.sort(key=lambda item: (priority_weight.get(str(item.get("priority", "P3")), 99), str(item.get("title", ""))))
+    actions.sort(
+        key=lambda item: (priority_weight.get(str(item.get("priority", "P3")), 99), str(item.get("title", "")))
+    )
     tool_actions = [item for item in actions if _is_tooling_feedback_action(item)]
     finding_actions = [item for item in actions if not _is_tooling_feedback_action(item)]
     blocking_tool_actions = [item for item in tool_actions if str(item.get("priority", "")).upper() == "P1"]
@@ -753,10 +1139,44 @@ def _render_pr_comment_body(*, plan: dict, pull_request: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _extract_line_comment_threads(plan: dict) -> list[dict]:
+    findings = plan.get("findings", [])
+    if not isinstance(findings, list):
+        return []
+    threads: list[dict] = []
+    for finding in findings:
+        if not isinstance(finding, dict):
+            continue
+        file_path = str(finding.get("file", "")).strip()
+        line = finding.get("line")
+        issue = str(finding.get("issue", "")).strip()
+        recommendation = str(finding.get("recommendation", "")).strip()
+        severity = str(finding.get("severity", "")).strip().lower()
+        if not file_path or not isinstance(line, int) or line < 1:
+            continue
+        if not issue and not recommendation:
+            continue
+        normalized_path = file_path if file_path.startswith("/") else f"/{file_path}"
+        label = "issue" if severity in {"blocking", "important"} else "suggestion"
+        content_parts = [f"**{label}:** {issue or 'Action needed'}"]
+        if recommendation:
+            content_parts.append(f"Next step: {recommendation}")
+        threads.append(
+            {
+                "file_path": normalized_path,
+                "line": line,
+                "content": "\n\n".join(content_parts),
+            }
+        )
+    return threads[:20]
+
+
 def _publish_pr_comment(*, review_target: Path, plan: dict) -> str | None:
     pr_ref = str(plan.get("review_pr_ref", "")).strip() or None
     provider_preference = str(plan.get("provider_preference", "auto"))
-    pull_request = _detect_active_pull_request(review_target=review_target, pr_ref=pr_ref, provider_preference=provider_preference)
+    pull_request = _detect_active_pull_request(
+        review_target=review_target, pr_ref=pr_ref, provider_preference=provider_preference
+    )
     if pull_request is None:
         return "No active PR found; skipping PR comment publication."
 
@@ -766,6 +1186,15 @@ def _publish_pr_comment(*, review_target: Path, plan: dict) -> str | None:
     provider = registry.pr_providers.get(provider_id)
     if provider is None:
         raise ValueError(f"No PR provider is registered for '{provider_id}'.")
+    line_comments = _extract_line_comment_threads(plan)
+    publish_signature = inspect.signature(provider.publish_comment)
+    if "line_comments" in publish_signature.parameters:
+        return provider.publish_comment(
+            review_target=review_target,
+            pull_request=pull_request,
+            body=body,
+            line_comments=line_comments,
+        )
     return provider.publish_comment(review_target=review_target, pull_request=pull_request, body=body)
 
 
@@ -833,6 +1262,7 @@ def _run_review_effects(
     execution_fallback_plugin_id: str | None = None,
     sandbox_plugin_id: str = "scratch-home",
     sandbox_fallback_plugin_id: str | None = None,
+    setup_approval_policy: dict | None = None,
 ) -> dict:
     if show_progress:
         selections = plan.get("selections", {}) if isinstance(plan.get("selections"), dict) else {}
@@ -851,25 +1281,37 @@ def _run_review_effects(
     plan["execution_plugin"] = execution_plugin.id
     plan["sandbox_plugin"] = sandbox_plugin.id
 
-    def _run_execution_pass(*, command_environment: dict[str, str] | None) -> tuple[list[dict], str | None, list[dict], str | None]:
+    def _run_execution_pass(
+        *, command_environment: dict[str, str] | None
+    ) -> tuple[list[dict], str | None, list[dict], str | None]:
         if run_setup:
+            run_setup_kwargs = {
+                "deterministic_gates": plan.get("deterministic_gates", []),
+                "interactive": show_progress,
+            }
+            if _callable_accepts_keyword(execution_plugin.run_setup, "approval_policy"):
+                run_setup_kwargs["approval_policy"] = setup_approval_policy
             try:
                 tool_setup_results, tool_setup_error = _invoke_with_optional_environment(
                     execution_plugin.run_setup,
                     command_environment=command_environment,
-                    deterministic_gates=plan.get("deterministic_gates", []),
-                    interactive=show_progress,
+                    **run_setup_kwargs,
                 )
             except (ValueError, RuntimeError, OSError, subprocess.SubprocessError) as primary_error:
                 fallback_id = (execution_fallback_plugin_id or "").strip()
                 if fallback_id and fallback_id != execution_plugin.id:
                     fallback_plugin = execution_registry.resolve(fallback_id)
                     plan["execution_plugin_fallback"] = fallback_plugin.id
+                    fallback_setup_kwargs = {
+                        "deterministic_gates": plan.get("deterministic_gates", []),
+                        "interactive": show_progress,
+                    }
+                    if _callable_accepts_keyword(fallback_plugin.run_setup, "approval_policy"):
+                        fallback_setup_kwargs["approval_policy"] = setup_approval_policy
                     tool_setup_results, tool_setup_error = _invoke_with_optional_environment(
                         fallback_plugin.run_setup,
                         command_environment=command_environment,
-                        deterministic_gates=plan.get("deterministic_gates", []),
-                        interactive=show_progress,
+                        **fallback_setup_kwargs,
                     )
                     _append_feedback_action(
                         plan,
@@ -884,7 +1326,9 @@ def _run_review_effects(
                 else:
                     raise
         else:
-            tool_setup_results = setup_results if setup_results is not None else list(plan.get("tool_setup_results", []))
+            tool_setup_results = (
+                setup_results if setup_results is not None else list(plan.get("tool_setup_results", []))
+            )
             tool_setup_error = setup_error if setup_error is not None else plan.get("tool_setup_error")
         if show_progress:
             if tool_setup_error is None:
@@ -997,7 +1441,9 @@ def _run_review_effects(
             for item in plan.get("feedback_actions", [])
             if isinstance(item, dict) and item.get("id") != "feedback-loop-next-step"
         ]
-        plan["feedback"] = [line for line in plan.get("feedback", []) if "Feedback loop next step is ready" not in str(line)]
+        plan["feedback"] = [
+            line for line in plan.get("feedback", []) if "Feedback loop next step is ready" not in str(line)
+        ]
     return plan
 
 
@@ -1019,7 +1465,9 @@ def _failed_gate_entries(plan: dict) -> list[tuple[str, str, str]]:
                 ),
                 None,
             )
-            command = str(failed_step.get("text", "unknown command")) if isinstance(failed_step, dict) else "unknown command"
+            command = (
+                str(failed_step.get("text", "unknown command")) if isinstance(failed_step, dict) else "unknown command"
+            )
             entries.append((phase, tool_id, command))
     return entries
 
@@ -1045,15 +1493,31 @@ def _render_completion_summary(plan: dict, *, post_action: str) -> str:
     units_total = len(plan.get("units", [])) if isinstance(plan.get("units"), list) else 0
     blocking = sum(1 for item in feedback_actions if str(item.get("priority")) == "P1")
     gate_failures = len(_failed_gate_entries(plan))
-    report_path = plan.get("feedback_report", {}).get("path", "") if isinstance(plan.get("feedback_report"), dict) else ""
+    report_path = (
+        plan.get("feedback_report", {}).get("path", "") if isinstance(plan.get("feedback_report"), dict) else ""
+    )
     state_path = plan.get("feedback_state", {}).get("path", "") if isinstance(plan.get("feedback_state"), dict) else ""
-    queue_path = plan.get("feedback_learning_queue", {}).get("path", "") if isinstance(plan.get("feedback_learning_queue"), dict) else ""
+    queue_path = (
+        plan.get("feedback_learning_queue", {}).get("path", "")
+        if isinstance(plan.get("feedback_learning_queue"), dict)
+        else ""
+    )
     promotion = plan.get("learning_promotion", {}) if isinstance(plan.get("learning_promotion"), dict) else {}
     governance = plan.get("governance", {}) if isinstance(plan.get("governance"), dict) else {}
+    persona_runs = plan.get("persona_runs", [])
+    if isinstance(persona_runs, list) and persona_runs:
+        ran = sum(1 for item in persona_runs if isinstance(item, dict) and item.get("status") == "ran")
+        skipped = sum(1 for item in persona_runs if isinstance(item, dict) and item.get("status") == "skipped")
+        failed = sum(1 for item in persona_runs if isinstance(item, dict) and item.get("status") == "failed")
+    else:
+        ran = units_total
+        skipped = 0
+        failed = 0
     lines = [
         "---- Complete ----",
         "",
         f"✔ Review finished · units: {units_total} · findings: {len(feedback_actions)} · blocking: {blocking}",
+        f"Persona execution: ran {ran} · skipped {skipped} · failed {failed}",
     ]
     if gate_failures:
         lines.append(f"✖ Deterministic gate failures: {gate_failures}")
@@ -1201,6 +1665,8 @@ def _attach_default_requirements_context(*, args: argparse.Namespace, review_tar
 
 
 def _finalize_review_output(*, plan: dict, review_target: Path, args: argparse.Namespace) -> int:
+    if not isinstance(plan.get("findings"), list):
+        plan["findings"] = []
     plan["schema_version"] = CURRENT_SCHEMA_VERSION
     feedback_report_path = write_feedback_report(target=review_target, plan=plan)
     feedback_state_path = update_feedback_state(target=review_target, plan=plan)
@@ -1224,7 +1690,9 @@ def _finalize_review_output(*, plan: dict, review_target: Path, args: argparse.N
         plan["learning_promotion"] = learning_promotion
     pr_ref = str(plan.get("review_pr_ref", "")).strip() or None
     provider_preference = str(plan.get("provider_preference", "auto"))
-    active_pr = _detect_active_pull_request(review_target=review_target, pr_ref=pr_ref, provider_preference=provider_preference)
+    active_pr = _detect_active_pull_request(
+        review_target=review_target, pr_ref=pr_ref, provider_preference=provider_preference
+    )
     post_action = _resolve_post_review_action(
         requested=getattr(args, "post_review_action", "ask"),
         active_pr=active_pr,
@@ -1276,7 +1744,9 @@ def handle_review_command(args: argparse.Namespace) -> int:
     config_raw = load_json(args.config) if args.config else {}
     config, migration_notes = migrate_config_payload(config_raw)
     if args.learn_best_practice:
-        record_learned_practices(target=review_target, practices=[item for item in args.learn_best_practice if isinstance(item, str)])
+        record_learned_practices(
+            target=review_target, practices=[item for item in args.learn_best_practice if isinstance(item, str)]
+        )
     config = merge_learned_extensions(config=config, target=review_target)
 
     personas, baselines, tools, languages, specialties, strategies = build_dynamic_catalog(config)
@@ -1329,6 +1799,7 @@ def handle_review_command(args: argparse.Namespace) -> int:
         execution_fallback_plugin_id=getattr(args, "execution_fallback_plugin", ""),
         sandbox_plugin_id=getattr(args, "sandbox_plugin", "scratch-home"),
         sandbox_fallback_plugin_id=getattr(args, "sandbox_fallback_plugin", "passthrough"),
+        setup_approval_policy=getattr(args, "setup_tool_policy", None),
     )
     plan = _attach_default_requirements_context(args=args, review_target=review_target, plan=plan)
     return _finalize_review_output(plan=plan, review_target=review_target, args=args)
@@ -1338,6 +1809,8 @@ def main() -> int:
     args = parse_args()
     if args.command == "uninstall":
         return handle_uninstall_command(args)
+    if args.command == "run":
+        return handle_run_command(args)
     if args.command in {"install", "init"}:
         return handle_install_or_init_command(args)
     return handle_review_command(args)

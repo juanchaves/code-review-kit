@@ -25,6 +25,7 @@ from code_review.review_planner.init import (
     render_init_plan,
     render_plan_summary,
     resolve_setup_tool_policy,
+    run_bootstrap_with_status,
     run_deterministic_gates,
     run_selected_tool_setup,
     run_uninstall_commands,
@@ -36,7 +37,9 @@ from code_review.review_planner.init import (
     write_feedback_learning_queue,
     write_feedback_report,
 )
+from code_review.review_planner.learning import merge_learned_extensions, record_learned_practices
 from code_review.review_planner.learning import default_learned_practices_path
+from code_review.review_planner.plugins.providers import AdoPrProvider
 
 
 def test_build_bootstrap_artifacts_includes_agent_and_instructions(tmp_path: Path) -> None:
@@ -188,7 +191,7 @@ def test_detect_active_pull_request_uses_ado_for_azure_url(tmp_path: Path, monke
 
     pr = cli_module._detect_active_pull_request(
         review_target=tmp_path,
-        pr_ref="https://dev.azure.com/nn-engineering/InnerSource/_git/aws-enablement-ops-work/pullrequest/7017",
+        pr_ref="https://dev.azure.com/sample-org/SampleProject/_git/sample-repo/pullrequest/7017",
     )
 
     assert pr is not None
@@ -205,7 +208,7 @@ def test_publish_pr_comment_posts_to_ado_pull_request(tmp_path: Path, monkeypatc
                 "number": 7017,
                 "title": "Improve workflow",
                 "provider": "ado",
-                "project": "InnerSource",
+                "project": "SampleProject",
                 "repository_id": "repo-id-1",
             }
 
@@ -232,6 +235,32 @@ def test_publish_pr_comment_posts_to_ado_pull_request(tmp_path: Path, monkeypatc
     message = cli_module._publish_pr_comment(review_target=tmp_path, plan=plan)
 
     assert message == "Posted actionable PR comment to ADO PR #7017."
+
+
+def test_extract_line_comment_threads_normalizes_paths_and_limits_count() -> None:
+    plan = {
+        "findings": [
+            {
+                "file": "src/main.py",
+                "line": 12,
+                "issue": "Missing guard",
+                "recommendation": "Add null check",
+                "severity": "blocking",
+            },
+            {
+                "file": "/src/app.py",
+                "line": 3,
+                "issue": "Prefer explicit type",
+                "recommendation": "",
+                "severity": "suggestion",
+            },
+        ]
+    }
+    threads = cli_module._extract_line_comment_threads(plan)
+    assert threads[0]["file_path"] == "/src/main.py"
+    assert threads[0]["line"] == 12
+    assert "Next step: Add null check" in threads[0]["content"]
+    assert threads[1]["file_path"] == "/src/app.py"
 
 
 def test_render_pr_comment_body_uses_conventional_comments_and_avoids_local_paths() -> None:
@@ -565,6 +594,105 @@ def test_run_deterministic_gates_executes_review_commands_in_target(tmp_path: Pa
     assert commands == [("uvx ruff check .", str(tmp_path))]
 
 
+def test_run_deterministic_gates_strips_gitleaks_log_opts_without_parent_commit(tmp_path: Path, monkeypatch) -> None:
+    commands: list[str] = []
+
+    def fake_run(command, check=False, capture_output=False, text=False, cwd=None, env=None):  # noqa: ANN001
+        if command[:3] == ["git", "-C", str(tmp_path)] and command[3:] == ["rev-parse", "--verify", "HEAD~1"]:
+            return SimpleNamespace(returncode=1, stdout="", stderr="")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    def fake_run_shell(command: str, *, cwd: Path | None = None, env: dict[str, str] | None = None) -> SimpleNamespace:
+        commands.append(command)
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+    monkeypatch.setattr("code_review.review_planner.init._run_shell_command", fake_run_shell)
+
+    results, error = run_deterministic_gates(
+        target=tmp_path,
+        deterministic_gates=[
+            {
+                "id": "security-gitleaks",
+                "title": "Gitleaks",
+                "review_commands": ["gitleaks detect --no-banner --source . --log-opts HEAD~1..HEAD"],
+            }
+        ],
+    )
+
+    assert error is None
+    assert results[0]["steps"][0]["text"] == "gitleaks detect --no-banner --source ."
+    assert commands == ["gitleaks detect --no-banner --source ."]
+
+
+def test_run_deterministic_gates_uses_merge_base_range_for_gitleaks(tmp_path: Path, monkeypatch) -> None:
+    commands: list[str] = []
+
+    def fake_run(command, check=False, capture_output=False, text=False, cwd=None, env=None):  # noqa: ANN001
+        if command[:3] != ["git", "-C", str(tmp_path)]:
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        if command[3:] == ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"]:
+            return SimpleNamespace(returncode=0, stdout="origin/main\n", stderr="")
+        if command[3:] == ["merge-base", "origin/main", "HEAD"]:
+            return SimpleNamespace(returncode=0, stdout="abc123\n", stderr="")
+        return SimpleNamespace(returncode=1, stdout="", stderr="")
+
+    def fake_run_shell(command: str, *, cwd: Path | None = None, env: dict[str, str] | None = None) -> SimpleNamespace:
+        commands.append(command)
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+    monkeypatch.setattr("code_review.review_planner.init._run_shell_command", fake_run_shell)
+
+    results, error = run_deterministic_gates(
+        target=tmp_path,
+        deterministic_gates=[
+            {
+                "id": "security-gitleaks",
+                "title": "Gitleaks",
+                "review_commands": ["gitleaks detect --no-banner --source . --log-opts HEAD~1..HEAD"],
+            }
+        ],
+    )
+
+    assert error is None
+    assert results[0]["steps"][0]["text"] == "gitleaks detect --no-banner --source . --log-opts abc123..HEAD"
+    assert commands == ["gitleaks detect --no-banner --source . --log-opts abc123..HEAD"]
+
+
+def test_run_deterministic_gates_falls_back_to_head_range_without_merge_base(tmp_path: Path, monkeypatch) -> None:
+    commands: list[str] = []
+
+    def fake_run(command, check=False, capture_output=False, text=False, cwd=None, env=None):  # noqa: ANN001
+        if command[:3] != ["git", "-C", str(tmp_path)]:
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        if command[3:] == ["rev-parse", "--verify", "HEAD~1"]:
+            return SimpleNamespace(returncode=0, stdout="parent\n", stderr="")
+        return SimpleNamespace(returncode=1, stdout="", stderr="")
+
+    def fake_run_shell(command: str, *, cwd: Path | None = None, env: dict[str, str] | None = None) -> SimpleNamespace:
+        commands.append(command)
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+    monkeypatch.setattr("code_review.review_planner.init._run_shell_command", fake_run_shell)
+
+    results, error = run_deterministic_gates(
+        target=tmp_path,
+        deterministic_gates=[
+            {
+                "id": "security-gitleaks",
+                "title": "Gitleaks",
+                "review_commands": ["gitleaks detect --no-banner --source . --log-opts HEAD~1..HEAD"],
+            }
+        ],
+    )
+
+    assert error is None
+    assert results[0]["steps"][0]["text"] == "gitleaks detect --no-banner --source . --log-opts HEAD~1..HEAD"
+    assert commands == ["gitleaks detect --no-banner --source . --log-opts HEAD~1..HEAD"]
+
+
 def test_run_deterministic_gates_passes_command_environment(tmp_path: Path, monkeypatch) -> None:
     env_values: list[dict[str, str] | None] = []
 
@@ -798,11 +926,82 @@ def test_handle_install_or_init_command_pr_workflow_defaults_to_comment(monkeypa
     assert captured_post_actions == ["comment"]
 
 
+def test_handle_run_command_executes_review_in_json_mode(monkeypatch, tmp_path: Path) -> None:
+    calls = {"bootstrap": 0, "review": 0}
+    captured_review_args: list[SimpleNamespace] = []
+    monkeypatch.setattr(cli_module, "default_state_path", lambda **kwargs: tmp_path / "state.json")
+    monkeypatch.setattr(
+        cli_module,
+        "resolve_setup_tool_policy",
+        lambda **kwargs: {"mode": "prompt", "approved_commands": []},
+    )
+    monkeypatch.setattr(
+        cli_module, "apply_bootstrap", lambda **kwargs: calls.__setitem__("bootstrap", calls["bootstrap"] + 1)
+    )
+    monkeypatch.setattr(
+        cli_module,
+        "handle_review_command",
+        lambda args: captured_review_args.append(args) or calls.__setitem__("review", calls["review"] + 1) or 0,
+    )
+
+    args = SimpleNamespace(
+        target=tmp_path,
+        name="code-review",
+        harness="copilot",
+        state_file=None,
+        tool_approval="prompt",
+        reset_tool_approvals=False,
+        emit="json",
+        verbose=1,
+        provider="auto",
+        execution_plugin="shell-local",
+        execution_fallback_plugin="",
+        sandbox_plugin="scratch-home",
+        sandbox_fallback_plugin="passthrough",
+        governance_plugin="strict-human-approval",
+        pr="123",
+        post_review_action="comment",
+    )
+
+    exit_code = cli_module.handle_run_command(args)
+
+    assert exit_code == 0
+    assert calls == {"bootstrap": 1, "review": 1}
+    assert len(captured_review_args) == 1
+    assert captured_review_args[0].target == tmp_path
+    assert captured_review_args[0].emit == "json"
+    assert captured_review_args[0].pr == "123"
+    assert captured_review_args[0].setup_tool_policy["mode"] == "prompt"
+
+
+def test_record_learned_practices_persists_repo_pack(tmp_path: Path) -> None:
+    payload = record_learned_practices(
+        target=tmp_path,
+        practices=["Prefer explicit empty-state copy in TUI screens."],
+    )
+    learned_path = default_learned_practices_path(target=tmp_path)
+    assert learned_path.exists()
+    practices = payload["extensions"]["specialties"]["repo-learnings"]["practices"]
+    assert "Prefer explicit empty-state copy in TUI screens." in practices
+
+
+def test_merge_learned_extensions_adds_repo_specialty_pack(tmp_path: Path) -> None:
+    record_learned_practices(
+        target=tmp_path,
+        practices=["Use concise action labels in menu footers."],
+    )
+    merged = merge_learned_extensions(config={}, target=tmp_path)
+    assert "extensions" in merged
+    assert "specialties" in merged["extensions"]
+    assert "repo-learnings" in merged["extensions"]["specialties"]
+
+
 def test_write_feedback_report_persists_actions(tmp_path: Path) -> None:
     plan = {
         "selections": {"personas": ["correctness"]},
         "tool_setup_results": [{"id": "python-ruff", "status": "passed", "steps": []}],
         "tool_setup_error": None,
+        "findings": [{"file": "src/main.py", "line": 10, "issue": "x", "recommendation": "y", "severity": "important"}],
         "feedback_actions": [{"id": "x", "priority": "P3", "title": "T", "action": "A", "why": "W"}],
         "feedback": ["[P3] T — Action: A"],
     }
@@ -811,6 +1010,7 @@ def test_write_feedback_report_persists_actions(tmp_path: Path) -> None:
     assert report_path.exists()
     payload = report_path.read_text(encoding="utf-8")
     assert '"feedback_actions"' in payload
+    assert '"findings"' in payload
     assert '"generated_at"' in payload
     assert '"tool_setup_results"' in payload
     assert '"tool_review_results"' in payload
@@ -828,7 +1028,85 @@ def test_legacy_script_entrypoint_works_without_pythonpath(tmp_path: Path) -> No
         check=False,
     )
     assert result.returncode == 0, result.stderr
-    assert "Compose a multi-persona code review plan." in result.stdout
+    assert "Compose a multi-persona code review plan" in result.stdout
+
+
+def test_parse_args_supports_repeatable_and_comma_separated_selections() -> None:
+    args = cli_module.parse_args(
+        [
+            "review",
+            ".",
+            "--tools",
+            "python-ruff",
+            "--tools",
+            "js-biome,security-semgrep",
+            "--strategies",
+            "adversarial",
+            "--strategies",
+            "failure-mode",
+        ]
+    )
+    cli_inputs = cli_module._build_cli_inputs(args)
+    assert cli_inputs["tools"] == ["python-ruff", "js-biome", "security-semgrep"]
+    assert cli_inputs["strategies"] == ["adversarial", "failure-mode"]
+
+
+def test_parse_args_does_not_swallow_target_with_tools_flag() -> None:
+    args = cli_module.parse_args(["review", "--tools", "python-ruff", "."])
+    assert args.target == Path(".")
+    cli_inputs = cli_module._build_cli_inputs(args)
+    assert cli_inputs["tools"] == ["python-ruff"]
+
+
+def test_ado_provider_omits_pr_thread_context_without_change_tracking(monkeypatch, tmp_path: Path) -> None:
+    provider = AdoPrProvider()
+    posted_payloads: list[dict] = []
+
+    monkeypatch.setattr(provider, "_latest_iteration_id", lambda **_kwargs: 7)
+    monkeypatch.setattr(provider, "_change_tracking_by_path", lambda **_kwargs: {})
+
+    def fake_run(command, cwd=None, check=False, capture_output=False, text=False):  # noqa: ANN001
+        in_file_index = command.index("--in-file")
+        payload_path = Path(command[in_file_index + 1])
+        posted_payloads.append(json.loads(payload_path.read_text(encoding="utf-8")))
+        return SimpleNamespace(returncode=0, stdout="{}", stderr="")
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+
+    message = provider.publish_comment(
+        review_target=tmp_path,
+        pull_request={
+            "number": 100,
+            "provider": "ado",
+            "project": "SampleProject",
+            "repository_id": "repo-id-1",
+        },
+        body="summary",
+        line_comments=[{"file_path": "/src/main.py", "line": 12, "content": "line comment"}],
+    )
+
+    assert message == "Posted actionable PR comment to ADO PR #100."
+    assert len(posted_payloads) == 2
+    assert "pullRequestThreadContext" not in posted_payloads[1]
+
+
+def test_parse_args_accepts_list_catalog_without_target() -> None:
+    args = cli_module.parse_args(["review", "--list-catalog"])
+    assert args.list_catalog is True
+    assert isinstance(args.target, Path)
+
+
+def test_resolve_setup_tool_policy_accepts_auto_alias() -> None:
+    policy = resolve_setup_tool_policy(previous_state={}, requested_mode="auto")
+    assert policy["mode"] == "allow-selected"
+
+
+def test_run_bootstrap_with_status_prints_summary_when_non_interactive(monkeypatch, tmp_path: Path, capsys) -> None:
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+    monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+    run_bootstrap_with_status(target=tmp_path, harness="copilot", name="code-review")
+    output = capsys.readouterr().out
+    assert "crk bootstrap" in output
 
 
 def test_review_cli_attaches_tool_evidence_to_units(tmp_path: Path) -> None:
