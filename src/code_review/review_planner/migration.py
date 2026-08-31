@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from copy import deepcopy
 
-
 CURRENT_SCHEMA_VERSION = 2
 SCHEMA_VERSION_KEY = "schema_version"
 DEPRECATION_KEY_RENAMES = {
@@ -17,7 +16,7 @@ DEPRECATION_KEY_RENAMES = {
 
 def _as_dict(payload: object, *, label: str) -> dict:
     if not isinstance(payload, dict):
-        raise ValueError(f"{label} must be a JSON object.")
+        raise TypeError(f"{label} must be a JSON object.")
     return payload
 
 

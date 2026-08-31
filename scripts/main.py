@@ -4,6 +4,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+
 def _load_main():
     repo_root = Path(__file__).resolve().parents[1]
     src_root = repo_root / "src"

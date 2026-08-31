@@ -2,17 +2,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from code_review.review_planner import requirements as requirements_module
 from code_review.review_planner.catalog import build_dynamic_catalog
 from code_review.review_planner.planner import (
     attach_tool_evidence_to_units,
     build_plan,
-    build_unit_prompt_context,
     build_tool_evidence,
+    build_unit_prompt_context,
     infer_language_ids,
     infer_specialty_ids,
     infer_tool_ids,
 )
-from code_review.review_planner import requirements as requirements_module
 from code_review.review_planner.render import to_markdown
 from code_review.review_planner.requirements import (
     apply_grilling_refinement,
@@ -68,6 +68,20 @@ def test_infer_tool_ids_matches_selected_languages_and_specialty() -> None:
         "security-gitleaks",
         "js-tsc",
     ]
+
+
+def test_infer_tool_ids_excludes_python_radon_for_non_python_language() -> None:
+    _, _, tools, _, _, _ = _catalog()
+
+    selected = infer_tool_ids(
+        selected_baselines=["code-smells-refactoring"],
+        selected_languages=["typescript"],
+        selected_specialties=[],
+        tools=tools,
+    )
+
+    assert "python-radon" not in selected
+    assert "complexity-lizard" in selected
 
 
 def test_infer_specialty_ids_detects_ui_ux_files(tmp_path: Path) -> None:
@@ -460,7 +474,12 @@ def test_derive_requirements_reads_general_bullets_without_requirement_heading(t
 
 
 def test_detect_issue_provider_auto_variants(tmp_path: Path) -> None:
-    assert detect_issue_provider(issue_ref="https://dev.azure.com/org/proj/_workitems/edit/123", issue_provider="auto", target=tmp_path) == "ado"
+    assert (
+        detect_issue_provider(
+            issue_ref="https://dev.azure.com/org/proj/_workitems/edit/123", issue_provider="auto", target=tmp_path
+        )
+        == "ado"
+    )
     assert detect_issue_provider(issue_ref="ABC-123", issue_provider="auto", target=tmp_path) == "jira"
     assert detect_issue_provider(issue_ref="#44", issue_provider="auto", target=tmp_path) == "github"
 
@@ -679,7 +698,14 @@ def test_build_plan_feedback_actions_are_actionable(tmp_path: Path) -> None:
 def test_build_tool_evidence_combines_setup_and_review_results() -> None:
     evidence = build_tool_evidence(
         setup_results=[{"id": "python-ruff", "title": "Ruff", "status": "passed", "steps": []}],
-        review_results=[{"id": "python-ruff", "title": "Ruff", "status": "passed", "steps": [{"kind": "review", "text": "uvx ruff check .", "status": "passed"}]}],
+        review_results=[
+            {
+                "id": "python-ruff",
+                "title": "Ruff",
+                "status": "passed",
+                "steps": [{"kind": "review", "text": "uvx ruff check .", "status": "passed"}],
+            }
+        ],
     )
 
     assert evidence[0]["phase"] == "setup"

@@ -165,7 +165,9 @@ def test_group_toggle_selects_all_items_in_same_pack() -> None:
         user_modified=wizard.baseline_practices_user_modified,
     )
     page = wizard._page_for_key("baseline_practices")
-    wizard.page_index = [index for index, item in enumerate(wizard.pages) if item.key == "baseline_practices"][0]
+    wizard.page_index = next(
+        index for index, item in enumerate(wizard.pages) if item.key == "baseline_practices"
+    )
     wizard.cursor_index = 0
     wizard._clear_current()
 
@@ -186,7 +188,7 @@ def test_group_jump_moves_cursor_to_next_header() -> None:
         initial_selected=wizard.initial_language_practice_selected,
         user_modified=wizard.language_practices_user_modified,
     )
-    wizard.page_index = [index for index, item in enumerate(wizard.pages) if item.key == "language_practices"][0]
+    wizard.page_index = next(index for index, item in enumerate(wizard.pages) if item.key == "language_practices")
     wizard.cursor_index = 0
 
     wizard._handle_key(ord("]"))

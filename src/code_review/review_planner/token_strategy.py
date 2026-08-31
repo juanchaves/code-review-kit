@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 
-
 MODEL_TIER_BY_PERSONA = {
     "correctness": "high",
     "security": "high",

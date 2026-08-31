@@ -104,7 +104,7 @@ FEEDBACK_STATE_FILE = "state.json"
 FEEDBACK_LEARNING_QUEUE_FILE = "learning-queue.json"
 FEEDBACK_STATUSES = {"open", "in_progress", "accepted", "dismissed", "done"}
 PRIORITY_WEIGHT = {"P1": 1, "P2": 2, "P3": 3}
-TOOL_APPROVAL_MODES = {"prompt", "allow-selected"}
+TOOL_APPROVAL_MODES = {"prompt", "allow-selected", "auto"}
 
 
 def _supports_color() -> bool:
@@ -133,7 +133,7 @@ def platform_label() -> str:
         return "macOS"
     if sys.platform == "win32":
         return "Windows"
-    return "Linux/WSL" if sys.platform.startswith("linux") or _is_wsl() else "Linux/WSL"
+    return "Linux/WSL"
 
 
 def _command_for_platform(note: str, platform_name: str) -> str | None:
@@ -438,7 +438,7 @@ def load_state(state_path: Path) -> dict:
         return {}
     payload = json.loads(state_path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
-        raise ValueError("State file must contain a JSON object.")
+        raise TypeError("State file must contain a JSON object.")
     migrated, _notes = migrate_state_payload(payload)
     return migrated
 
@@ -455,10 +455,15 @@ def resolve_setup_tool_policy(
     if isinstance(raw, dict):
         mode = raw.get("mode")
         approved = raw.get("approved_commands", [])
+        if mode == "auto":
+            mode = "allow-selected"
         if isinstance(mode, str) and mode in TOOL_APPROVAL_MODES:
             policy["mode"] = mode
         if isinstance(approved, list) and all(isinstance(item, str) for item in approved):
             policy["approved_commands"] = list(dict.fromkeys(item.strip() for item in approved if item.strip()))
+
+    if requested_mode == "auto":
+        requested_mode = "allow-selected"
 
     if requested_mode is not None:
         if requested_mode not in TOOL_APPROVAL_MODES:
@@ -480,6 +485,22 @@ def save_state(*, state_path: Path, payload: dict) -> None:
 def write_feedback_report(*, target: Path, plan: dict) -> Path:
     report_path = default_feedback_report_path(target=target)
     report_path.parent.mkdir(parents=True, exist_ok=True)
+    persona_runs = plan.get("persona_runs", [])
+    if not isinstance(persona_runs, list):
+        persona_runs = []
+    if not persona_runs:
+        units = plan.get("units", [])
+        if isinstance(units, list):
+            persona_runs = [
+                {
+                    "unit_id": str(unit.get("unit_id", f"unit-{index + 1}"))
+                    if isinstance(unit, dict)
+                    else f"unit-{index + 1}",
+                    "status": "ran",
+                    "reason": "Planned for execution.",
+                }
+                for index, unit in enumerate(units)
+            ]
     payload = {
         "schema_version": CURRENT_SCHEMA_VERSION,
         "generated_at": datetime.now(UTC).isoformat(),
@@ -489,7 +510,9 @@ def write_feedback_report(*, target: Path, plan: dict) -> Path:
         "tool_setup_error": plan.get("tool_setup_error"),
         "tool_review_results": plan.get("tool_review_results", []),
         "tool_review_error": plan.get("tool_review_error"),
+        "persona_runs": persona_runs,
         "feedback_actions": plan.get("feedback_actions", []),
+        "findings": plan.get("findings", []),
         "feedback": plan.get("feedback", []),
     }
     report_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
@@ -508,7 +531,7 @@ def update_feedback_state(*, target: Path, plan: dict) -> Path:
             state = loaded
     items = state.setdefault("items", {})
     if not isinstance(items, dict):
-        raise ValueError("Feedback state file is invalid: 'items' must be an object.")
+        raise TypeError("Feedback state file is invalid: 'items' must be an object.")
 
     active_ids: set[str] = set()
     for raw in plan.get("feedback_actions", []):
@@ -562,10 +585,10 @@ def write_feedback_learning_queue(*, target: Path) -> Path:
 
     payload = json.loads(state_path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
-        raise ValueError("Feedback state file is invalid.")
+        raise TypeError("Feedback state file is invalid.")
     items = payload.get("items", {})
     if not isinstance(items, dict):
-        raise ValueError("Feedback state file is invalid: 'items' must be an object.")
+        raise TypeError("Feedback state file is invalid: 'items' must be an object.")
 
     candidates: list[dict] = []
     for item in items.values():
@@ -615,10 +638,10 @@ def promote_accepted_feedback_to_learnings(*, target: Path, feedback_ids: list[s
 
     payload = json.loads(state_path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
-        raise ValueError("Feedback state file is invalid.")
+        raise TypeError("Feedback state file is invalid.")
     items = payload.get("items", {})
     if not isinstance(items, dict):
-        raise ValueError("Feedback state file is invalid: 'items' must be an object.")
+        raise TypeError("Feedback state file is invalid: 'items' must be an object.")
 
     allowed_ids = {item.strip() for item in (feedback_ids or []) if isinstance(item, str) and item.strip()}
     promoted_ids: list[str] = []
@@ -666,10 +689,10 @@ def apply_feedback_status_updates(*, target: Path, updates: list[str]) -> Path:
 
     payload = json.loads(state_path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
-        raise ValueError("Feedback state file is invalid.")
+        raise TypeError("Feedback state file is invalid.")
     items = payload.get("items", {})
     if not isinstance(items, dict):
-        raise ValueError("Feedback state file is invalid: 'items' must be an object.")
+        raise TypeError("Feedback state file is invalid: 'items' must be an object.")
 
     now = datetime.now(UTC).isoformat()
     for update in updates:
@@ -822,6 +845,24 @@ def _approve_setup_command(
     return False
 
 
+def _all_verify_commands_pass(
+    commands: list[str],
+    command_environment: dict[str, str] | None,
+) -> bool:
+    """Silently probe verification commands to check if a tool is already installed."""
+    for command in commands:
+        if not isinstance(command, str):
+            continue
+        result = _run_shell_command_with_environment(
+            command=command,
+            interactive=False,
+            env=command_environment,
+        )
+        if result.returncode != 0:
+            return False
+    return bool(commands)
+
+
 def run_selected_tool_setup(
     *,
     deterministic_gates: list[dict],
@@ -841,6 +882,13 @@ def run_selected_tool_setup(
         tool_id = str(gate.get("id", ""))
         title = str(gate.get("title", tool_id))
         gate_result = {"id": tool_id, "title": title, "steps": [], "status": "passed"}
+
+        verify_commands = [c for c in gate.get("commands", []) if isinstance(c, str)]
+        if gate.get("setup") and _all_verify_commands_pass(verify_commands, command_environment):
+            gate_result["steps"].append({"kind": "verify", "text": "already-installed", "status": "passed"})
+            results.append(gate_result)
+            continue
+
         for note in gate.get("setup", []):
             if not isinstance(note, str):
                 continue
@@ -860,8 +908,10 @@ def run_selected_tool_setup(
                 results.append(gate_result)
                 return (
                     results,
-                    "Tool setup command was not approved. Rerun `init` and use `--tool-approval allow-selected` "
-                    "or approve commands interactively.",
+                    (
+                        "Tool setup command was not approved. Rerun `init` and use "
+                        "`--tool-approval allow-selected` or approve commands interactively."
+                    ),
                 )
             completed = _execute_setup_command(
                 command=command,
@@ -892,8 +942,10 @@ def run_selected_tool_setup(
                 results.append(gate_result)
                 return (
                     results,
-                    "Tool verification command was not approved. Rerun `init` and use `--tool-approval allow-selected` "
-                    "or approve commands interactively.",
+                    (
+                        "Tool verification command was not approved. Rerun `init` and use "
+                        "`--tool-approval allow-selected` or approve commands interactively."
+                    ),
                 )
             completed = _execute_setup_command(
                 command=command,
@@ -931,6 +983,46 @@ def run_deterministic_gates(
     if interactive is None:
         interactive = bool(sys.stdin.isatty() and sys.stdout.isatty())
 
+    def _git_stdout(command: list[str]) -> str | None:
+        completed = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if completed.returncode != 0:
+            return None
+        candidate = completed.stdout.strip()
+        return candidate or None
+
+    def resolve_gitleaks_log_opts() -> str | None:
+        upstream = _git_stdout(
+            ["git", "-C", str(target), "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"]
+        )
+        if upstream:
+            merge_base = _git_stdout(["git", "-C", str(target), "merge-base", upstream, "HEAD"])
+            if merge_base:
+                return f"{merge_base}..HEAD"
+
+        default_remote_head = _git_stdout(["git", "-C", str(target), "symbolic-ref", "refs/remotes/origin/HEAD"])
+        if default_remote_head:
+            merge_base = _git_stdout(["git", "-C", str(target), "merge-base", default_remote_head, "HEAD"])
+            if merge_base:
+                return f"{merge_base}..HEAD"
+
+        has_previous_commit = _git_stdout(["git", "-C", str(target), "rev-parse", "--verify", "HEAD~1"]) is not None
+        if has_previous_commit:
+            return "HEAD~1..HEAD"
+        return None
+
+    def resolve_review_command(command: str) -> str:
+        if "gitleaks detect" not in command or "--log-opts HEAD~1..HEAD" not in command:
+            return command
+        log_opts = resolve_gitleaks_log_opts()
+        if log_opts is None:
+            return command.replace(" --log-opts HEAD~1..HEAD", "")
+        return command.replace("HEAD~1..HEAD", log_opts)
+
     for gate in deterministic_gates:
         tool_id = str(gate.get("id", ""))
         title = str(gate.get("title", tool_id))
@@ -939,9 +1031,10 @@ def run_deterministic_gates(
         for command in commands:
             if not isinstance(command, str):
                 continue
+            resolved_command = resolve_review_command(command)
             if interactive:
                 completed = _run_shell_command_with_environment(
-                    command=command,
+                    command=resolved_command,
                     cwd=target,
                     phase="review",
                     tool_id=tool_id,
@@ -950,14 +1043,14 @@ def run_deterministic_gates(
                 )
             else:
                 completed = _run_shell_command_with_environment(
-                    command=command,
+                    command=resolved_command,
                     cwd=target,
                     interactive=False,
                     env=command_environment,
                 )
             step_result = {
                 "kind": "review",
-                "text": command,
+                "text": resolved_command,
                 "status": "passed" if completed.returncode == 0 else "failed",
                 "exit_code": completed.returncode,
                 "stdout": completed.stdout.strip(),
@@ -1133,7 +1226,9 @@ def run_bootstrap_with_status(*, target: Path, harness: str, name: str) -> Boots
     artifacts = build_bootstrap_artifacts(target=target, name=name)
 
     if not sys.stdout.isatty() or not sys.stdin.isatty():
-        return apply_bootstrap(target=target, name=name)
+        result = apply_bootstrap(target=target, name=name)
+        print(colorize_console_block(render_bootstrap_result(result, harness=harness, name=name, wizard_started=False)))
+        return result
 
     print(_color("crk setup", f"{BOLD}{CYAN}"))
     print(_color("=================", CYAN))

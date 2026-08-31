@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Protocol
+from typing import Protocol
 
 
 class ExecutionPlugin(Protocol):
@@ -14,6 +15,7 @@ class ExecutionPlugin(Protocol):
         deterministic_gates: list[dict],
         interactive: bool | None = None,
         command_environment: dict[str, str] | None = None,
+        approval_policy: dict | None = None,
     ) -> tuple[list[dict], str | None]: ...
 
     def run_review(
@@ -44,12 +46,14 @@ class ShellExecutionPlugin:
         deterministic_gates: list[dict],
         interactive: bool | None = None,
         command_environment: dict[str, str] | None = None,
+        approval_policy: dict | None = None,
     ) -> tuple[list[dict], str | None]:
         try:
             return self._run_selected_tool_setup(
                 deterministic_gates=deterministic_gates,
                 interactive=interactive,
                 command_environment=command_environment,
+                approval_policy=approval_policy,
             )
         except TypeError:
             return self._run_selected_tool_setup(deterministic_gates=deterministic_gates)

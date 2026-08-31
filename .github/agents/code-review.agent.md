@@ -18,7 +18,8 @@ Then execute this workflow automatically for all supported harnesses:
 3. Run two review axes: standards compliance and spec/requirements compliance.
 4. Report only actionable findings with file+line anchors, severity, confidence, and fix guidance.
 5. Do not claim tool execution unless selected tools were actually run.
-6. End by asking the user to choose one next action:
+6. For Azure DevOps automation, prefer the `azure-devops-cli` skill/agent path before raw `az` commands.
+7. End by asking the user to choose one next action:
    - Post actionable comments to the active PR (if a PR exists), or
    - Generate an implementation plan from the findings.
 

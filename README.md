@@ -29,16 +29,30 @@ Run commands from this repository root. If you are in another repository, run:
 uv run --directory /path/to/code-review-kit crk init --harness copilot --target "$PWD"
 ```
 
+`code-review` is the canonical CLI command. `crk` is kept as a short alias.
+
 Install the repo bootstrap files:
 
 ```bash
 uv run crk install --harness copilot --target .
 ```
 
+Preview the bootstrap without writing files:
+
+```bash
+uv run crk install --harness copilot --target . --preview
+```
+
 Initialize and launch the wizard:
 
 ```bash
 uv run crk init --harness copilot --target .
+```
+
+One-shot init + review:
+
+```bash
+uv run code-review run . --pr 123
 ```
 
 After setup succeeds, `init` can start the review workflow immediately:
@@ -58,6 +72,9 @@ uv run crk init --harness copilot --target . --post-init-action ask --post-init-
 
 # Start directly in PR review workflow (auto-switches post-review action to PR comments when set to ask)
 uv run crk init --harness copilot --target . --post-init-action start --post-init-workflow pr-review
+
+# Shorthand for the above
+uv run crk init --harness copilot --target . --start-pr-review
 
 # Provide a specific PR number/URL for PR review workflow
 uv run crk init --harness copilot --target . --post-init-action start --post-init-workflow pr-review --pr 123
@@ -79,7 +96,7 @@ During setup, choose how deterministic tool commands are approved:
 # Prompt before each setup command (persists in state)
 uv run crk init --harness copilot --target . --tool-approval prompt
 
-# Auto-allow selected setup commands (default)
+# Auto-allow selected setup commands (default; `auto` alias is supported)
 uv run crk init --harness copilot --target . --tool-approval allow-selected
 
 # Reset remembered approvals and start clean
@@ -91,16 +108,22 @@ The wizard now presents a dedicated tool-approval page immediately after languag
 That page explicitly states that allowing a tool also allows crk to install it when missing or inaccessible.
 Live braille spinner updates show both installation status (when applicable) and setup/verification status per tool command.
 
+Preview init without writing files:
+
+```bash
+uv run crk init --harness copilot --target . --preview
+```
+
 Re-run init with cleanup visibility for removed selections:
 
 ```bash
-uv run crk init --harness copilot --target . --uninstall-deselected-options
+uv run crk init --harness copilot --target . --uninstall-deselected-tools
 ```
 
 Apply uninstall commands for deselected tool packs:
 
 ```bash
-uv run crk init --harness copilot --target . --uninstall-deselected-options --apply-uninstall-deselected-options
+uv run crk init --harness copilot --target . --uninstall-deselected-tools --apply-uninstall-deselected-tools
 ```
 
 Or generate a plan directly:
@@ -119,6 +142,8 @@ uv run crk . \
   --emit markdown
 ```
 
+`--tools` and `--strategies` accept comma-separated values and repeatable flags (for example: `--tools a --tools b`).
+
 Generate a plan with requirements-compliance context for review-only flows:
 
 ```bash
@@ -131,7 +156,14 @@ uv run crk review . \
   --requirements-refiner grilling
 ```
 
-Provider/execution/governance plugin controls:
+Scope review to changes since a base ref:
+
+```bash
+uv run crk review . --base-ref main
+uv run crk review . --base-ref HEAD~3
+```
+
+
 
 ```bash
 uv run crk review . \
@@ -168,6 +200,11 @@ Promote approved (`accepted`) feedback items into repo learnings:
 uv run crk review . \
   --feedback-status "missing-language-pack:accepted" \
   --learn-accepted-feedback
+
+# Promote a specific feedback item by ID
+uv run crk review . \
+  --learn-accepted-feedback \
+  --learn-feedback-id missing-language-pack
 ```
 
 If you skip language or specialty packs, the planner will infer likely packs from the target repo.
@@ -240,6 +277,8 @@ uv run crk . --config review-profile.example.json --emit json
 - `--cache-mode none|prompt|context|full`
 - `--model-routing right-size|fixed`
 - `--max-parallel-units <N>`
+- `--max-files-per-unit <N>` — guidance cap for files per subagent unit
+- `--max-file-hints <N>` — max file hint globs per unit after TOON narrowing
 
 ## Plugin controls
 
@@ -277,13 +316,19 @@ Interactive review runs now include explicit execution-state UX:
 - A dedicated gate-failure summary block (with failing command) when any setup/review gate fails.
 - A final completion block with units/findings/blocking counts, PR action status, and feedback artifact paths.
 - PR review workflow can prompt for a PR number/URL (or use `--pr`) before publishing PR comments.
-- Default output is concise; use `-vvv` to emit the full multi-section plan details.
+- Default output is concise; use `-v` / `-vv` / `-vvv` to increase verbosity up to full multi-section plan details.
 
 ## Tooling setup
 
 The init flow runs selected tool setup and verification smoke checks, then shows a TUI setup summary table with each pack's prerequisites/setup notes and verification commands so the user can review what was prepared before exiting.
 On Linux and WSL, follow the Linux/WSL branch in the setup notes; Homebrew-only commands are macOS-specific.
 Full repo lint/type/security/complexity gates still run in review mode, not during init.
+
+Remove repo-local bootstrap files installed by `install` or `init`:
+
+```bash
+uv run crk uninstall --harness copilot --target .
+```
 
 ## Mutation tests
 

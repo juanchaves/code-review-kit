@@ -516,18 +516,22 @@ TOOL_PACKS: dict[str, ToolPack] = {
     "security-osv-scanner": ToolPack(
         title="OSV-Scanner",
         purpose="Dependency vulnerability scanning with minimal setup.",
-        setup=["macOS: brew install osv-scanner; Linux/WSL: use the OSV-Scanner release binary or your distro package manager"],
+        setup=[
+            "macOS: brew install osv-scanner; Linux/WSL: use the OSV-Scanner release binary or your distro package manager"
+        ],
         commands=["osv-scanner --version"],
-        review_commands=["osv-scanner scan --lockfile=uv.lock"],
+        review_commands=["osv-scanner scan ."],
         applies_to=["security", "python", "javascript", "typescript", "shell"],
         uninstall=["brew uninstall osv-scanner"],
     ),
     "security-gitleaks": ToolPack(
         title="Gitleaks",
         purpose="Secret scanning for repos, files, and diffs.",
-        setup=["macOS: brew install gitleaks; Linux/WSL: use the Gitleaks release binary or your distro package manager"],
+        setup=[
+            "macOS: brew install gitleaks; Linux/WSL: use the Gitleaks release binary or your distro package manager"
+        ],
         commands=["gitleaks version"],
-        review_commands=["gitleaks detect --no-banner --source ."],
+        review_commands=["gitleaks detect --no-banner --source . --log-opts HEAD~1..HEAD"],
         applies_to=["security", "python", "javascript", "typescript", "shell"],
         uninstall=["brew uninstall gitleaks"],
     ),
@@ -571,13 +575,17 @@ def build_dynamic_catalog(
 
     extensions = config.get("extensions", {})
     if not isinstance(extensions, dict):
-        raise ValueError("'extensions' must be an object when provided.")
+        raise TypeError("'extensions' must be an object when provided.")
 
     def parse_pack_extension(raw: dict, kind: str) -> Pack:
         title = raw.get("title")
         practices = raw.get("practices")
         file_hints = raw.get("file_hints", [])
-        if not isinstance(title, str) or not isinstance(practices, list) or not all(isinstance(p, str) for p in practices):
+        if (
+            not isinstance(title, str)
+            or not isinstance(practices, list)
+            or not all(isinstance(p, str) for p in practices)
+        ):
             raise ValueError(f"Invalid {kind} extension entry.")
         if not isinstance(file_hints, list) or not all(isinstance(h, str) for h in file_hints):
             raise ValueError(f"Invalid {kind} extension file_hints.")
@@ -588,13 +596,13 @@ def build_dynamic_catalog(
 
     for key, raw in (extensions.get("personas") or {}).items():
         if not isinstance(raw, dict):
-            raise ValueError("Persona extension entries must be objects.")
+            raise TypeError("Persona extension entries must be objects.")
         title = raw.get("title")
         goal = raw.get("goal")
         checks = raw.get("checks")
         file_hints = raw.get("file_hints", [])
         if not isinstance(title, str) or not isinstance(goal, str) or not isinstance(checks, list):
-            raise ValueError("Invalid persona extension entry.")
+            raise TypeError("Invalid persona extension entry.")
         if not all(isinstance(item, str) for item in checks):
             raise ValueError("Persona extension checks must be strings.")
         if not isinstance(file_hints, list) or not all(isinstance(item, str) for item in file_hints):
@@ -603,17 +611,17 @@ def build_dynamic_catalog(
 
     for key, raw in (extensions.get("languages") or {}).items():
         if not isinstance(raw, dict):
-            raise ValueError("Language extension entries must be objects.")
+            raise TypeError("Language extension entries must be objects.")
         languages[key] = parse_pack_extension(raw, "language")
 
     for key, raw in (extensions.get("baselines") or {}).items():
         if not isinstance(raw, dict):
-            raise ValueError("Baseline extension entries must be objects.")
+            raise TypeError("Baseline extension entries must be objects.")
         baselines[key] = parse_pack_extension(raw, "baseline")
 
     for key, raw in (extensions.get("tools") or {}).items():
         if not isinstance(raw, dict):
-            raise ValueError("Tool extension entries must be objects.")
+            raise TypeError("Tool extension entries must be objects.")
         title = raw.get("title")
         purpose = raw.get("purpose")
         setup = raw.get("setup", [])
@@ -621,8 +629,11 @@ def build_dynamic_catalog(
         review_commands = raw.get("review_commands", [])
         applies_to = raw.get("applies_to", [])
         uninstall = raw.get("uninstall", [])
-        if not isinstance(title, str) or not isinstance(purpose, str) or not isinstance(commands, list) or not all(
-            isinstance(item, str) for item in commands
+        if (
+            not isinstance(title, str)
+            or not isinstance(purpose, str)
+            or not isinstance(commands, list)
+            or not all(isinstance(item, str) for item in commands)
         ):
             raise ValueError("Invalid tool extension entry.")
         if not isinstance(review_commands, list) or not all(isinstance(item, str) for item in review_commands):
@@ -645,15 +656,19 @@ def build_dynamic_catalog(
 
     for key, raw in (extensions.get("specialties") or {}).items():
         if not isinstance(raw, dict):
-            raise ValueError("Specialty extension entries must be objects.")
+            raise TypeError("Specialty extension entries must be objects.")
         specialties[key] = parse_pack_extension(raw, "specialty")
 
     for key, raw in (extensions.get("strategies") or {}).items():
         if not isinstance(raw, dict):
-            raise ValueError("Strategy extension entries must be objects.")
+            raise TypeError("Strategy extension entries must be objects.")
         title = raw.get("title")
         directives = raw.get("directives")
-        if not isinstance(title, str) or not isinstance(directives, list) or not all(isinstance(item, str) for item in directives):
+        if (
+            not isinstance(title, str)
+            or not isinstance(directives, list)
+            or not all(isinstance(item, str) for item in directives)
+        ):
             raise ValueError("Invalid strategy extension entry.")
         strategies[key] = Strategy(title=title, directives=directives)
 

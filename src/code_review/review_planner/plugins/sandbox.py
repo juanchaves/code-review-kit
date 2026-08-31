@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Protocol
-import tempfile
+from typing import Protocol, Self
 
 
 @dataclass
@@ -13,7 +14,7 @@ class SandboxSession:
     note: str | None = None
     cleanup: Callable[[], None] = field(repr=False, default=lambda: None)
 
-    def __enter__(self) -> SandboxSession:
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> bool:

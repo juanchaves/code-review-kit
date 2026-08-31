@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import html
 import json
 import os
 import re
 import subprocess
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 from .plugins.providers import ProviderRegistry, build_default_provider_registry
 
