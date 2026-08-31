@@ -16,7 +16,7 @@ def load_learned_practices(*, target: Path) -> dict:
         return {}
     payload = json.loads(learned_path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
-        raise ValueError("Learned practices file must contain a JSON object.")
+        raise TypeError("Learned practices file must contain a JSON object.")
     return payload
 
 
@@ -36,19 +36,19 @@ def record_learned_practices(
     learned = load_learned_practices(target=target)
     extensions = learned.setdefault("extensions", {})
     if not isinstance(extensions, dict):
-        raise ValueError("'extensions' in learned practices must be an object.")
+        raise TypeError("'extensions' in learned practices must be an object.")
     specialties = extensions.setdefault("specialties", {})
     if not isinstance(specialties, dict):
-        raise ValueError("'extensions.specialties' in learned practices must be an object.")
+        raise TypeError("'extensions.specialties' in learned practices must be an object.")
     pack = specialties.setdefault(
         specialty_id,
         {"title": specialty_title, "practices": [], "file_hints": ["**/*"]},
     )
     if not isinstance(pack, dict):
-        raise ValueError("Learned specialty pack must be an object.")
+        raise TypeError("Learned specialty pack must be an object.")
     existing = pack.setdefault("practices", [])
     if not isinstance(existing, list):
-        raise ValueError("Learned specialty practices must be an array.")
+        raise TypeError("Learned specialty practices must be an array.")
 
     for practice in practices:
         if isinstance(practice, str) and practice.strip() and practice not in existing:
@@ -68,7 +68,7 @@ def merge_learned_extensions(*, config: dict, target: Path) -> dict:
         return config
     learned_extensions = learned.get("extensions", {})
     if not isinstance(learned_extensions, dict):
-        raise ValueError("Learned practices extensions must be an object.")
+        raise TypeError("Learned practices extensions must be an object.")
     merged = dict(config)
     base_extensions = merged.get("extensions", {})
     if base_extensions and not isinstance(base_extensions, dict):

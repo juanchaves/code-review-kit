@@ -75,7 +75,9 @@ def select_ids(
             raise ValueError(f"'{kind}' must be a string array in config.")
         include = config_include
 
-    if config_exclude and (not isinstance(config_exclude, list) or not all(isinstance(item, str) for item in config_exclude)):
+    if config_exclude and (
+        not isinstance(config_exclude, list) or not all(isinstance(item, str) for item in config_exclude)
+    ):
         raise ValueError(f"'exclude_{kind}' must be a string array in config.")
 
     include = ordered_unique(include + cli_values)
@@ -92,7 +94,9 @@ def select_ids(
     return selected
 
 
-def merged_hints(persona: Persona, baseline_packs: list[Pack], language_packs: list[Pack], specialty_packs: list[Pack]) -> list[str]:
+def merged_hints(
+    persona: Persona, baseline_packs: list[Pack], language_packs: list[Pack], specialty_packs: list[Pack]
+) -> list[str]:
     hints = (
         persona.file_hints
         + [h for pack in baseline_packs for h in pack.file_hints]
@@ -105,7 +109,22 @@ def merged_hints(persona: Persona, baseline_packs: list[Pack], language_packs: l
 def _repo_text_files(target: Path) -> list[Path]:
     if not target.exists() or not target.is_dir():
         return []
-    text_suffixes = {".py", ".md", ".txt", ".ts", ".tsx", ".js", ".jsx", ".sh", ".yml", ".yaml", ".json", ".toml", ".ini", ".cfg"}
+    text_suffixes = {
+        ".py",
+        ".md",
+        ".txt",
+        ".ts",
+        ".tsx",
+        ".js",
+        ".jsx",
+        ".sh",
+        ".yml",
+        ".yaml",
+        ".json",
+        ".toml",
+        ".ini",
+        ".cfg",
+    }
     names = {"README", "SKILL", "CLAUDE", "AGENTS", "GEMINI"}
     files: list[Path] = []
     for path in target.rglob("*"):
@@ -148,9 +167,9 @@ def _authoring_doc_paths(target: Path) -> list[Path]:
         if _is_ignored_path(path, target):
             continue
         rel = path.relative_to(target).as_posix()
-        if rel.startswith(".github/agents/") or rel.startswith(".github/prompts/") or rel.startswith(".github/instructions/"):
-            paths.append(path)
-        elif path.name in {"README.md", "SKILL.md", "CLAUDE.md", "AGENTS.md", "GEMINI.md"}:
+        if (
+            rel.startswith((".github/agents/", ".github/prompts/", ".github/instructions/"))
+        ) or path.name in {"README.md", "SKILL.md", "CLAUDE.md", "AGENTS.md", "GEMINI.md"}:
             paths.append(path)
     return paths
 
@@ -198,17 +217,33 @@ def infer_specialty_ids(target: Path, specialties: dict[str, Pack]) -> list[str]
 
     candidates: list[str] = []
     paths = [path.relative_to(target).as_posix() for path in target.rglob("*")]
-    if "cdk.json" in {path.name for path in target.rglob("*")} or any("cdk/" in item or item.endswith("/cdk") for item in paths):
+    if "cdk.json" in {path.name for path in target.rglob("*")} or any(
+        "cdk/" in item or item.endswith("/cdk") for item in paths
+    ):
         candidates.append("cdk")
     if any(path.suffix == ".tf" for path in target.rglob("*.tf") if not _is_ignored_path(path, target)):
         candidates.append("terraform")
-    if any(item.startswith("k8s/") or item.startswith("helm/") for item in paths if not any(part in IGNORED_SCAN_DIRS for part in Path(item).parts)):
+    if any(
+        item.startswith(("k8s/", "helm/"))
+        for item in paths
+        if not any(part in IGNORED_SCAN_DIRS for part in Path(item).parts)
+    ):
         candidates.append("kubernetes")
-    if any(item.startswith("api/") or "openapi/" in item for item in paths if not any(part in IGNORED_SCAN_DIRS for part in Path(item).parts)):
+    if any(
+        item.startswith("api/") or "openapi/" in item
+        for item in paths
+        if not any(part in IGNORED_SCAN_DIRS for part in Path(item).parts)
+    ):
         candidates.append("api")
-    if any(path.suffix in {".tsx", ".jsx"} for path in target.rglob("*") if path.is_file() and not _is_ignored_path(path, target)):
+    if any(
+        path.suffix in {".tsx", ".jsx"}
+        for path in target.rglob("*")
+        if path.is_file() and not _is_ignored_path(path, target)
+    ):
         candidates.append("react")
-    if any(path.suffix == ".vue" for path in target.rglob("*") if path.is_file() and not _is_ignored_path(path, target)):
+    if any(
+        path.suffix == ".vue" for path in target.rglob("*") if path.is_file() and not _is_ignored_path(path, target)
+    ):
         candidates.append("vue")
     cli_tui_detected = any(
         "tui" in path.stem.lower() or "cli" in path.stem.lower()
@@ -234,11 +269,15 @@ def infer_specialty_ids(target: Path, specialties: dict[str, Pack]) -> list[str]
         "GEMINI.md",
     }
     if any(item in harness_files for item in paths) or any(
-        item.startswith(".github/prompts/")
-        or item.startswith(".github/instructions/")
-        or item.startswith(".github/agents/")
-        or item.startswith(".cursor/rules/")
-        or item.startswith(".kiro/steering/")
+        item.startswith(
+            (
+                ".github/prompts/",
+                ".github/instructions/",
+                ".github/agents/",
+                ".cursor/rules/",
+                ".kiro/steering/",
+            )
+        )
         for item in paths
     ):
         candidates.append("harness-context-quality")
@@ -278,12 +317,39 @@ def infer_tool_ids(
     if "shell" in selected_languages:
         candidates.extend(["shell-shellcheck", "shell-shfmt", "shell-bats"])
     if "javascript" in selected_languages:
-        candidates.extend(["js-biome", "js-typescript-eslint", "js-oxlint", "security-semgrep", "security-osv-scanner", "security-gitleaks"])
+        candidates.extend(
+            [
+                "js-biome",
+                "js-typescript-eslint",
+                "js-oxlint",
+                "security-semgrep",
+                "security-osv-scanner",
+                "security-gitleaks",
+            ]
+        )
     if "typescript" in selected_languages:
-        candidates.extend(["js-tsc", "js-biome", "js-typescript-eslint", "js-oxlint", "security-semgrep", "security-osv-scanner", "security-gitleaks"])
+        candidates.extend(
+            [
+                "js-tsc",
+                "js-biome",
+                "js-typescript-eslint",
+                "js-oxlint",
+                "security-semgrep",
+                "security-osv-scanner",
+                "security-gitleaks",
+            ]
+        )
 
     if "review-quality-gates" in selected_baselines:
-        candidates.extend(["security-semgrep", "security-gitleaks", "security-detect-secrets", "security-osv-scanner", "complexity-lizard"])
+        candidates.extend(
+            [
+                "security-semgrep",
+                "security-gitleaks",
+                "security-detect-secrets",
+                "security-osv-scanner",
+                "complexity-lizard",
+            ]
+        )
     if "code-smells-refactoring" in selected_baselines:
         if "python" in selected_languages:
             candidates.append("python-radon")
@@ -320,7 +386,9 @@ def shared_checks(
     return ordered_unique(checks)
 
 
-def selected_practices_for_packs(*, pack_type: str, packs: list[tuple[str, Pack]], selected_ids: list[str]) -> list[str]:
+def selected_practices_for_packs(
+    *, pack_type: str, packs: list[tuple[str, Pack]], selected_ids: list[str]
+) -> list[str]:
     if not selected_ids:
         return [practice for _, pack in packs for practice in pack.practices]
 
@@ -448,7 +516,9 @@ def build_units(
     token_policy: dict,
 ) -> list[dict]:
     units: list[dict] = []
-    overlay_directives = [directive for strategy_id in selected_strategies for directive in strategies[strategy_id].directives]
+    overlay_directives = [
+        directive for strategy_id in selected_strategies for directive in strategies[strategy_id].directives
+    ]
 
     for persona_id in selected_personas:
         persona = personas[persona_id]
@@ -473,9 +543,13 @@ def build_units(
                         "tool_evidence": tool_evidence,
                         "token_strategy": token_policy,
                         "file_hints": hints,
-                        "recommended_model_tier": choose_model_tier(persona_id, unit_strategy_ids, token_policy["model_routing"]),
+                        "recommended_model_tier": choose_model_tier(
+                            persona_id, unit_strategy_ids, token_policy["model_routing"]
+                        ),
                         "cache_key": f"{persona_id}|{strategy_id}|{token_policy['cache_mode']}",
-                        "context_plan": "TOON narrowed: changed-files-first + targeted-hints-only" if token_policy["toon"] else "Standard: full hint set",
+                        "context_plan": "TOON narrowed: changed-files-first + targeted-hints-only"
+                        if token_policy["toon"]
+                        else "Standard: full hint set",
                     }
                 )
                 units[-1]["prompt_context"] = build_unit_prompt_context(unit=units[-1])
@@ -483,20 +557,22 @@ def build_units(
 
         unit_strategy_ids = selected_strategies
         unit = {
-                "unit_id": persona_id,
-                "persona_id": persona_id,
-                "persona_title": persona.title,
-                "persona_goal": persona.goal,
-                "strategy_ids": unit_strategy_ids,
-                "strategy_directives": ordered_unique(overlay_directives),
-                "checks": checks,
-                "shared_checks": shared_pack_checks,
-                "tool_evidence": tool_evidence,
-                "token_strategy": token_policy,
-                "file_hints": hints,
-                "recommended_model_tier": choose_model_tier(persona_id, unit_strategy_ids, token_policy["model_routing"]),
-                "cache_key": f"{persona_id}|overlay|{token_policy['cache_mode']}",
-                "context_plan": "TOON narrowed: changed-files-first + targeted-hints-only" if token_policy["toon"] else "Standard: full hint set",
+            "unit_id": persona_id,
+            "persona_id": persona_id,
+            "persona_title": persona.title,
+            "persona_goal": persona.goal,
+            "strategy_ids": unit_strategy_ids,
+            "strategy_directives": ordered_unique(overlay_directives),
+            "checks": checks,
+            "shared_checks": shared_pack_checks,
+            "tool_evidence": tool_evidence,
+            "token_strategy": token_policy,
+            "file_hints": hints,
+            "recommended_model_tier": choose_model_tier(persona_id, unit_strategy_ids, token_policy["model_routing"]),
+            "cache_key": f"{persona_id}|overlay|{token_policy['cache_mode']}",
+            "context_plan": "TOON narrowed: changed-files-first + targeted-hints-only"
+            if token_policy["toon"]
+            else "Standard: full hint set",
         }
         unit["prompt_context"] = build_unit_prompt_context(unit=unit)
         units.append(unit)
@@ -802,7 +878,11 @@ def build_feedback_actions(
                 "why": f"Detected {shared_check_overlaps} overlaps between unit checks and shared checks.",
             }
         )
-    if "ui-ux-cli-tui" in specialties and _repo_contains_braille_spinner(target_path) and not _repo_contains_success_emoji(target_path):
+    if (
+        "ui-ux-cli-tui" in specialties
+        and _repo_contains_braille_spinner(target_path)
+        and not _repo_contains_success_emoji(target_path)
+    ):
         actions.append(
             {
                 "id": "ui-ux-spinner-success-state",
@@ -812,7 +892,9 @@ def build_feedback_actions(
                 "why": "The repo uses animated progress affordances, but no success emoji was found to confirm completion.",
             }
         )
-    if ("ui-ux" in specialties or "ui-ux-cli-tui" in specialties or "ui-ux-web" in specialties) and "ux" not in personas:
+    if (
+        "ui-ux" in specialties or "ui-ux-cli-tui" in specialties or "ui-ux-web" in specialties
+    ) and "ux" not in personas:
         actions.append(
             {
                 "id": "ui-ux-persona-not-selected",
@@ -824,17 +906,16 @@ def build_feedback_actions(
         )
     authoring_paths = _authoring_doc_paths(target_path)
     authoring_text = _read_authoring_text(authoring_paths)
-    if authoring_paths and "harness-context-quality" in specialties:
-        if len(authoring_text.split()) > 900:
-            actions.append(
-                {
-                    "id": "harness-docs-too-large",
-                    "priority": "P3",
-                    "title": "Harness-facing docs are carrying too much context",
-                    "action": "Trim repeated guidance and keep only the activation contract, workflow steps, and harness caveats in harness-facing files.",
-                    "why": "Harness docs should stay compact so they remain high-signal and token-efficient.",
-                }
-            )
+    if authoring_paths and "harness-context-quality" in specialties and len(authoring_text.split()) > 900:
+        actions.append(
+            {
+                "id": "harness-docs-too-large",
+                "priority": "P3",
+                "title": "Harness-facing docs are carrying too much context",
+                "action": "Trim repeated guidance and keep only the activation contract, workflow steps, and harness caveats in harness-facing files.",
+                "why": "Harness docs should stay compact so they remain high-signal and token-efficient.",
+            }
+        )
     if not has_deterministic_gates:
         actions.append(
             {

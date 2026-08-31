@@ -13,9 +13,9 @@ from .review_planner.init import (
     apply_bootstrap,
     apply_feedback_status_updates,
     apply_uninstall,
-    colorize_console_block,
-    choose_review_workflow_after_init,
     choose_pull_request_reference,
+    choose_review_workflow_after_init,
+    colorize_console_block,
     compute_deselections,
     default_feedback_learning_queue_path,
     default_state_path,
@@ -23,11 +23,11 @@ from .review_planner.init import (
     load_state,
     pause_for_acknowledgement,
     promote_accepted_feedback_to_learnings,
-    resolve_setup_tool_policy,
     render_deselection_summary,
     render_init_plan,
     render_uninstall_commands,
     render_uninstall_result,
+    resolve_setup_tool_policy,
     run_bootstrap_with_status,
     run_deterministic_gates,
     run_selected_tool_setup,
@@ -45,11 +45,6 @@ from .review_planner.init import (
 from .review_planner.io_utils import load_json
 from .review_planner.learning import merge_learned_extensions, record_learned_practices
 from .review_planner.migration import CURRENT_SCHEMA_VERSION, migrate_config_payload
-from .review_planner.plugins.execution import build_default_execution_registry
-from .review_planner.plugins.governance import build_default_governance_registry
-from .review_planner.plugins.providers import extract_ado_work_item_id
-from .review_planner.plugins.sandbox import build_default_sandbox_registry
-from .review_planner.plugins.providers import build_default_provider_registry
 from .review_planner.planner import (
     attach_tool_evidence_to_units,
     build_plan,
@@ -57,9 +52,12 @@ from .review_planner.planner import (
     build_unit_prompt_context,
     parse_csv,
 )
+from .review_planner.plugins.execution import build_default_execution_registry
+from .review_planner.plugins.governance import build_default_governance_registry
+from .review_planner.plugins.providers import build_default_provider_registry, extract_ado_work_item_id
+from .review_planner.plugins.sandbox import build_default_sandbox_registry
 from .review_planner.render import to_catalog_markdown, to_markdown
-from .review_planner.requirements import apply_walkthrough_overrides, derive_requirements
-from .review_planner.requirements import apply_grilling_refinement
+from .review_planner.requirements import apply_grilling_refinement, apply_walkthrough_overrides, derive_requirements
 from .review_planner.token_strategy import TOKEN_PROFILES, resolve_token_policy
 from .review_planner.tui import run_review_wizard, show_setup_summary
 
@@ -967,7 +965,7 @@ def _callable_accepts_keyword(callable_obj: object, keyword: str) -> bool:
     return False
 
 
-def _invoke_with_optional_environment(method, *, command_environment: dict[str, str] | None = None, **kwargs):  # noqa: ANN001
+def _invoke_with_optional_environment(method, *, command_environment: dict[str, str] | None = None, **kwargs):
     if command_environment is not None and _callable_accepts_keyword(method, "command_environment"):
         return method(command_environment=command_environment, **kwargs)
     return method(**kwargs)

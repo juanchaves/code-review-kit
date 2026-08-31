@@ -8,5 +8,5 @@ def load_json(path: Path) -> dict:
     with path.open(encoding="utf-8") as handle:
         data = json.load(handle)
     if not isinstance(data, dict):
-        raise ValueError("Config must be a JSON object.")
+        raise TypeError("Config must be a JSON object.")
     return data

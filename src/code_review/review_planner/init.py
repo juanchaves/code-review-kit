@@ -133,7 +133,7 @@ def platform_label() -> str:
         return "macOS"
     if sys.platform == "win32":
         return "Windows"
-    return "Linux/WSL" if sys.platform.startswith("linux") or _is_wsl() else "Linux/WSL"
+    return "Linux/WSL"
 
 
 def _command_for_platform(note: str, platform_name: str) -> str | None:
@@ -438,7 +438,7 @@ def load_state(state_path: Path) -> dict:
         return {}
     payload = json.loads(state_path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
-        raise ValueError("State file must contain a JSON object.")
+        raise TypeError("State file must contain a JSON object.")
     migrated, _notes = migrate_state_payload(payload)
     return migrated
 
@@ -531,7 +531,7 @@ def update_feedback_state(*, target: Path, plan: dict) -> Path:
             state = loaded
     items = state.setdefault("items", {})
     if not isinstance(items, dict):
-        raise ValueError("Feedback state file is invalid: 'items' must be an object.")
+        raise TypeError("Feedback state file is invalid: 'items' must be an object.")
 
     active_ids: set[str] = set()
     for raw in plan.get("feedback_actions", []):
@@ -585,10 +585,10 @@ def write_feedback_learning_queue(*, target: Path) -> Path:
 
     payload = json.loads(state_path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
-        raise ValueError("Feedback state file is invalid.")
+        raise TypeError("Feedback state file is invalid.")
     items = payload.get("items", {})
     if not isinstance(items, dict):
-        raise ValueError("Feedback state file is invalid: 'items' must be an object.")
+        raise TypeError("Feedback state file is invalid: 'items' must be an object.")
 
     candidates: list[dict] = []
     for item in items.values():
@@ -638,10 +638,10 @@ def promote_accepted_feedback_to_learnings(*, target: Path, feedback_ids: list[s
 
     payload = json.loads(state_path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
-        raise ValueError("Feedback state file is invalid.")
+        raise TypeError("Feedback state file is invalid.")
     items = payload.get("items", {})
     if not isinstance(items, dict):
-        raise ValueError("Feedback state file is invalid: 'items' must be an object.")
+        raise TypeError("Feedback state file is invalid: 'items' must be an object.")
 
     allowed_ids = {item.strip() for item in (feedback_ids or []) if isinstance(item, str) and item.strip()}
     promoted_ids: list[str] = []
@@ -689,10 +689,10 @@ def apply_feedback_status_updates(*, target: Path, updates: list[str]) -> Path:
 
     payload = json.loads(state_path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
-        raise ValueError("Feedback state file is invalid.")
+        raise TypeError("Feedback state file is invalid.")
     items = payload.get("items", {})
     if not isinstance(items, dict):
-        raise ValueError("Feedback state file is invalid: 'items' must be an object.")
+        raise TypeError("Feedback state file is invalid: 'items' must be an object.")
 
     now = datetime.now(UTC).isoformat()
     for update in updates:
@@ -908,8 +908,10 @@ def run_selected_tool_setup(
                 results.append(gate_result)
                 return (
                     results,
-                    "Tool setup command was not approved. Rerun `init` and use `--tool-approval allow-selected` "
-                    "or approve commands interactively.",
+                    (
+                        "Tool setup command was not approved. Rerun `init` and use "
+                        "`--tool-approval allow-selected` or approve commands interactively."
+                    ),
                 )
             completed = _execute_setup_command(
                 command=command,
@@ -940,8 +942,10 @@ def run_selected_tool_setup(
                 results.append(gate_result)
                 return (
                     results,
-                    "Tool verification command was not approved. Rerun `init` and use `--tool-approval allow-selected` "
-                    "or approve commands interactively.",
+                    (
+                        "Tool verification command was not approved. Rerun `init` and use "
+                        "`--tool-approval allow-selected` or approve commands interactively."
+                    ),
                 )
             completed = _execute_setup_command(
                 command=command,

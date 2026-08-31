@@ -37,8 +37,11 @@ from code_review.review_planner.init import (
     write_feedback_learning_queue,
     write_feedback_report,
 )
-from code_review.review_planner.learning import merge_learned_extensions, record_learned_practices
-from code_review.review_planner.learning import default_learned_practices_path
+from code_review.review_planner.learning import (
+    default_learned_practices_path,
+    merge_learned_extensions,
+    record_learned_practices,
+)
 from code_review.review_planner.plugins.providers import AdoPrProvider
 
 
@@ -423,7 +426,7 @@ def test_run_selected_tool_setup_uses_linux_wsl_branch(monkeypatch) -> None:
     assert error is None
     assert results[0]["status"] == "passed"
     assert commands == [
-        "shellcheck **/*.sh **/*.bash **/*.zsh",   # pre-flight probe (fails → triggers setup)
+        "shellcheck **/*.sh **/*.bash **/*.zsh",  # pre-flight probe (fails → triggers setup)
         "sudo apt-get update && sudo apt-get install -y shellcheck",
         "shellcheck **/*.sh **/*.bash **/*.zsh",
     ]
@@ -564,7 +567,7 @@ def test_run_selected_tool_setup_skips_install_when_already_installed(monkeypatc
     # Verify command succeeds on pre-flight probe → tool already installed, setup skipped
     monkeypatch.setattr(
         "code_review.review_planner.init._run_shell_command",
-        lambda command, **_: (commands.append(command) or SimpleNamespace(returncode=0, stderr="", stdout="")),
+        lambda command, **_: commands.append(command) or SimpleNamespace(returncode=0, stderr="", stdout=""),
     )
     monkeypatch.setattr("code_review.review_planner.init.platform_label", lambda: "macOS")
 
@@ -637,7 +640,7 @@ def test_run_deterministic_gates_executes_review_commands_in_target(tmp_path: Pa
 def test_run_deterministic_gates_strips_gitleaks_log_opts_without_parent_commit(tmp_path: Path, monkeypatch) -> None:
     commands: list[str] = []
 
-    def fake_run(command, check=False, capture_output=False, text=False, cwd=None, env=None):  # noqa: ANN001
+    def fake_run(command, check=False, capture_output=False, text=False, cwd=None, env=None):
         if command[:3] == ["git", "-C", str(tmp_path)] and command[3:] == ["rev-parse", "--verify", "HEAD~1"]:
             return SimpleNamespace(returncode=1, stdout="", stderr="")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
@@ -668,7 +671,7 @@ def test_run_deterministic_gates_strips_gitleaks_log_opts_without_parent_commit(
 def test_run_deterministic_gates_uses_merge_base_range_for_gitleaks(tmp_path: Path, monkeypatch) -> None:
     commands: list[str] = []
 
-    def fake_run(command, check=False, capture_output=False, text=False, cwd=None, env=None):  # noqa: ANN001
+    def fake_run(command, check=False, capture_output=False, text=False, cwd=None, env=None):
         if command[:3] != ["git", "-C", str(tmp_path)]:
             return SimpleNamespace(returncode=0, stdout="", stderr="")
         if command[3:] == ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"]:
@@ -703,7 +706,7 @@ def test_run_deterministic_gates_uses_merge_base_range_for_gitleaks(tmp_path: Pa
 def test_run_deterministic_gates_falls_back_to_head_range_without_merge_base(tmp_path: Path, monkeypatch) -> None:
     commands: list[str] = []
 
-    def fake_run(command, check=False, capture_output=False, text=False, cwd=None, env=None):  # noqa: ANN001
+    def fake_run(command, check=False, capture_output=False, text=False, cwd=None, env=None):
         if command[:3] != ["git", "-C", str(tmp_path)]:
             return SimpleNamespace(returncode=0, stdout="", stderr="")
         if command[3:] == ["rev-parse", "--verify", "HEAD~1"]:
@@ -1105,7 +1108,7 @@ def test_ado_provider_omits_pr_thread_context_without_change_tracking(monkeypatc
     monkeypatch.setattr(provider, "_latest_iteration_id", lambda **_kwargs: 7)
     monkeypatch.setattr(provider, "_change_tracking_by_path", lambda **_kwargs: {})
 
-    def fake_run(command, cwd=None, check=False, capture_output=False, text=False):  # noqa: ANN001
+    def fake_run(command, cwd=None, check=False, capture_output=False, text=False):
         in_file_index = command.index("--in-file")
         payload_path = Path(command[in_file_index + 1])
         posted_payloads.append(json.loads(payload_path.read_text(encoding="utf-8")))
