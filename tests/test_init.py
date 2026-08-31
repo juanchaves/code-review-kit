@@ -393,10 +393,15 @@ def test_shell_tool_setup_mentions_linux_wsl_path() -> None:
 
 def test_run_selected_tool_setup_uses_linux_wsl_branch(monkeypatch) -> None:
     commands: list[str] = []
+    call_count = 0
 
     def fake_run_shell(command: str) -> SimpleNamespace:
+        nonlocal call_count
         commands.append(command)
-        return SimpleNamespace(returncode=0, stderr="")
+        # First call is the pre-flight verify probe; simulate tool not yet installed
+        call_count += 1
+        returncode = 1 if call_count == 1 else 0
+        return SimpleNamespace(returncode=returncode, stderr="")
 
     monkeypatch.setattr("code_review.review_planner.init.platform_label", lambda: "Linux/WSL")
     monkeypatch.setattr("code_review.review_planner.init.shutil.which", lambda name: "/usr/bin/uv")
@@ -418,6 +423,7 @@ def test_run_selected_tool_setup_uses_linux_wsl_branch(monkeypatch) -> None:
     assert error is None
     assert results[0]["status"] == "passed"
     assert commands == [
+        "shellcheck **/*.sh **/*.bash **/*.zsh",   # pre-flight probe (fails → triggers setup)
         "sudo apt-get update && sudo apt-get install -y shellcheck",
         "shellcheck **/*.sh **/*.bash **/*.zsh",
     ]
@@ -522,6 +528,11 @@ def test_run_selected_tool_setup_shows_live_spinner_feedback_when_interactive(mo
         calls.append((command, phase, tool_id))
         return SimpleNamespace(returncode=0, stderr="", stdout="")
 
+    # Pre-flight probe runs non-interactively; return failure so setup is not skipped
+    monkeypatch.setattr(
+        "code_review.review_planner.init._run_shell_command",
+        lambda command, **_: SimpleNamespace(returncode=1, stderr="", stdout=""),
+    )
     monkeypatch.setattr("code_review.review_planner.init._run_shell_command_with_spinner", fake_spinner)
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("sys.stdout.isatty", lambda: True)
@@ -545,6 +556,35 @@ def test_run_selected_tool_setup_shows_live_spinner_feedback_when_interactive(mo
         ("brew install ruff", "install", "python-ruff"),
         ("uvx ruff --version", "setup", "python-ruff"),
     ]
+
+
+def test_run_selected_tool_setup_skips_install_when_already_installed(monkeypatch) -> None:
+    commands: list[str] = []
+
+    # Verify command succeeds on pre-flight probe → tool already installed, setup skipped
+    monkeypatch.setattr(
+        "code_review.review_planner.init._run_shell_command",
+        lambda command, **_: (commands.append(command) or SimpleNamespace(returncode=0, stderr="", stdout="")),
+    )
+    monkeypatch.setattr("code_review.review_planner.init.platform_label", lambda: "macOS")
+
+    results, error = run_selected_tool_setup(
+        deterministic_gates=[
+            {
+                "id": "js-biome",
+                "title": "Biome",
+                "setup": ["npm i -D @biomejs/biome"],
+                "commands": ["npx @biomejs/biome --version"],
+            }
+        ],
+        approval_policy={"mode": "allow-selected", "approved_commands": ["npm i -D @biomejs/biome"]},
+    )
+
+    assert error is None
+    assert results[0]["status"] == "passed"
+    # Only the pre-flight probe should have run; install command must not appear
+    assert commands == ["npx @biomejs/biome --version"]
+    assert results[0]["steps"][0]["text"] == "already-installed"
 
 
 def test_tool_setup_feedback_reports_failed_gate() -> None:
