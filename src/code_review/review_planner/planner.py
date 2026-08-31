@@ -285,7 +285,9 @@ def infer_tool_ids(
     if "review-quality-gates" in selected_baselines:
         candidates.extend(["security-semgrep", "security-gitleaks", "security-detect-secrets", "security-osv-scanner", "complexity-lizard"])
     if "code-smells-refactoring" in selected_baselines:
-        candidates.extend(["python-radon", "complexity-lizard"])
+        if "python" in selected_languages:
+            candidates.append("python-radon")
+        candidates.append("complexity-lizard")
 
     if "security" in selected_specialties:
         candidates.extend(["security-semgrep", "security-gitleaks", "security-detect-secrets", "security-osv-scanner"])

@@ -70,6 +70,20 @@ def test_infer_tool_ids_matches_selected_languages_and_specialty() -> None:
     ]
 
 
+def test_infer_tool_ids_excludes_python_radon_for_non_python_language() -> None:
+    _, _, tools, _, _, _ = _catalog()
+
+    selected = infer_tool_ids(
+        selected_baselines=["code-smells-refactoring"],
+        selected_languages=["typescript"],
+        selected_specialties=[],
+        tools=tools,
+    )
+
+    assert "python-radon" not in selected
+    assert "complexity-lizard" in selected
+
+
 def test_infer_specialty_ids_detects_ui_ux_files(tmp_path: Path) -> None:
     (tmp_path / "web").mkdir()
     (tmp_path / "web" / "index.html").write_text("", encoding="utf-8")
