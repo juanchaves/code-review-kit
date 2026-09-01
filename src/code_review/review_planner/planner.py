@@ -11,15 +11,17 @@ IGNORED_SCAN_DIRS = {
     ".git",
     ".venv",
     ".code-review",
-    ".claude",
-    ".cursor",
-    ".copilot",
     "node_modules",
     "dist",
     "build",
     "coverage",
     "__pycache__",
 }
+
+# Dirs excluded only from automatic language *inference* — they are still fully
+# scannable for content, specialty detection, and harness-quality review.
+# Add to IGNORED_SCAN_DIRS only if you want them invisible to everything.
+LANGUAGE_INFER_IGNORED_DIRS = IGNORED_SCAN_DIRS | {".claude", ".cursor", ".copilot"}
 
 
 def parse_csv(raw: str) -> list[str]:
@@ -210,7 +212,7 @@ def infer_language_ids(target: Path, languages: dict[str, Pack]) -> list[str]:
     for path in target.rglob("*"):
         if not path.is_file():
             continue
-        if _is_ignored_path(path, target):
+        if any(part in LANGUAGE_INFER_IGNORED_DIRS for part in path.relative_to(target).parts):
             continue
         pack_id = extension_map.get(path.suffix)
         if pack_id and pack_id in languages:
