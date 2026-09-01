@@ -391,7 +391,7 @@ class ReviewWizard:
         selected_ids = [option.id for option in page.options if option.selected]
         if not selected_ids:
             selected_ids = list(self.initial_specialty_selected)
-        selected_set = set(expand_specialty_hierarchy(selected_ids))
+        selected_set = set(expand_specialty_hierarchy(selected_ids, specialties))
 
         roots: list[tuple[str, Pack]] = []
         children_by_parent: dict[str, list[tuple[str, Pack]]] = {}
@@ -603,7 +603,7 @@ class ReviewWizard:
                 ]
             elif page.key == "specialties":
                 payload[page.key] = expand_specialty_hierarchy(
-                    [option.id for option in page.options if option.selected]
+                    [option.id for option in page.options if option.selected], self.specialties_catalog
                 )
             else:
                 payload[page.key] = [option.id for option in page.options if option.selected]

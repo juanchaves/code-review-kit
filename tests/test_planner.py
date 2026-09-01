@@ -3,12 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 
 from code_review.review_planner import requirements as requirements_module
-from code_review.review_planner.catalog import build_dynamic_catalog
+from code_review.review_planner.catalog import Pack, build_dynamic_catalog
 from code_review.review_planner.planner import (
     attach_tool_evidence_to_units,
     build_plan,
     build_tool_evidence,
     build_unit_prompt_context,
+    expand_specialty_hierarchy,
     infer_language_ids,
     infer_specialty_ids,
     infer_tool_ids,
@@ -94,6 +95,61 @@ def test_infer_specialty_ids_detects_ui_ux_files(tmp_path: Path) -> None:
     _, _, _, _, specialties, _ = _catalog()
 
     assert infer_specialty_ids(tmp_path, specialties) == ["ui-ux-cli-tui", "ui-ux-web", "ui-ux"]
+
+
+def test_catalog_cloud_hierarchy_reparents_cdk_under_aws() -> None:
+    _, _, _, _, specialties, _ = _catalog()
+
+    assert specialties["cloud"].parent is None
+    assert specialties["aws"].parent == "cloud"
+    assert specialties["gcp"].parent == "cloud"
+    assert specialties["azure"].parent == "cloud"
+    assert specialties["cdk"].parent == "aws"
+
+
+def test_catalog_aws_sub_specialties_are_children_of_aws() -> None:
+    _, _, _, _, specialties, _ = _catalog()
+
+    assert specialties["aws-destructive-ops"].parent == "aws"
+    assert specialties["aws-iam"].parent == "aws"
+
+    expanded = expand_specialty_hierarchy(["aws-destructive-ops", "aws-iam"], specialties)
+    assert expanded == ["cloud", "aws", "aws-destructive-ops", "aws-iam"]
+
+
+def test_expand_specialty_hierarchy_walks_multi_level_ancestry() -> None:
+    specialties = {
+        "cloud": Pack(title="Cloud", practices=[], file_hints=[]),
+        "aws": Pack(title="AWS", practices=[], file_hints=[], parent="cloud"),
+        "aws-iam": Pack(title="AWS IAM", practices=[], file_hints=[], parent="aws"),
+    }
+
+    result = expand_specialty_hierarchy(["aws-iam"], specialties)
+
+    assert result == ["cloud", "aws", "aws-iam"]
+
+
+def test_expand_specialty_hierarchy_deduplicates_shared_ancestors() -> None:
+    specialties = {
+        "cloud": Pack(title="Cloud", practices=[], file_hints=[]),
+        "aws": Pack(title="AWS", practices=[], file_hints=[], parent="cloud"),
+        "aws-iam": Pack(title="AWS IAM", practices=[], file_hints=[], parent="aws"),
+        "aws-destructive-ops": Pack(title="AWS Destructive Ops", practices=[], file_hints=[], parent="aws"),
+    }
+
+    result = expand_specialty_hierarchy(["aws-iam", "aws-destructive-ops"], specialties)
+
+    assert result == ["cloud", "aws", "aws-iam", "aws-destructive-ops"]
+
+
+def test_expand_specialty_hierarchy_ignores_unknown_or_cyclic_parents() -> None:
+    specialties = {
+        "orphan": Pack(title="Orphan", practices=[], file_hints=[], parent="missing-parent"),
+    }
+
+    result = expand_specialty_hierarchy(["orphan"], specialties)
+
+    assert result == ["orphan"]
 
 
 def test_infer_language_ids_ignores_single_incidental_shell_file(tmp_path: Path) -> None:
@@ -182,7 +238,7 @@ def test_build_plan_on_polyglot_repo_selects_expected_defaults(tmp_path: Path) -
     )
 
     assert plan["selections"]["languages"] == ["javascript", "python", "shell", "typescript"]
-    assert plan["selections"]["specialties"] == ["cdk"]
+    assert plan["selections"]["specialties"] == ["cloud", "aws", "cdk"]
     assert plan["selections"]["tools"] == [
         "python-ruff",
         "python-pyrefly",

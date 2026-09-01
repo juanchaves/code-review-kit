@@ -154,6 +154,11 @@ LANGUAGE_PACKS: dict[str, Pack] = {
             "Mutation minimization in shared state",
             "Avoid implicit globals and dynamic require/import patterns",
             "Keep browser and Node-specific code paths separated",
+            (
+                "Numeric input validation: always pass a radix to parseInt; validate parseInt/parseFloat "
+                "results before use since they silently return NaN or signed zero (parseInt('-0.5', 10) "
+                "is -0, and -0 >= 0 is true); prefer Number.isInteger(x) && x > 0 for cutoff/threshold checks"
+            ),
         ],
         file_hints=["**/*.js", "**/*.jsx", "**/*.mjs"],
     ),
@@ -171,6 +176,93 @@ LANGUAGE_PACKS: dict[str, Pack] = {
 }
 
 SPECIALTY_PACKS: dict[str, Pack] = {
+    "cloud": Pack(
+        title="Cloud Platform Pack",
+        practices=[
+            "Least-privilege access and blast-radius awareness for any resource mutation",
+            "Consistent identifier types across services (never compare an alias/name against an ARN/resource ID)",
+            "Idempotent, safely-retryable create/update/delete workflows",
+        ],
+        file_hints=["**/*.tf", "**/*.tfvars", "cdk/**", "infra/**", "**/*.bicep", "**/*.arm.json"],
+    ),
+    "aws": Pack(
+        title="AWS Pack",
+        practices=[
+            "AWS SDK pagination is handled completely (all cursor/token fields, not just the first)",
+            (
+                "Bulk operations (delete/deregister/detach) are scoped by explicit resource ID or owner tag, "
+                "not just name/type prefix"
+            ),
+            "ARN parsing preserves the full resource path; avoid naive split('/').pop() on multi-segment ARNs",
+        ],
+        file_hints=["**/*.ts", "**/*.py", "**/*.js", "cdk/**", "infra/**"],
+        parent="cloud",
+    ),
+    "aws-destructive-ops": Pack(
+        title="AWS Destructive Operations Pack",
+        practices=[
+            (
+                "Every entry point (main path, pre-destroy hooks, force/dry-run flags) applies the same "
+                "deletion/inventory guard checks — no alternate path silently bypasses them"
+            ),
+            (
+                "Guard/inventory comparisons use the same identifier type end-to-end (alias vs alias, "
+                "ARN vs ARN); never store an alias and compare it against an ARN"
+            ),
+            (
+                "Deletion/cleanup loops collect the full target set first, then mutate in a separate pass — "
+                "never delete from a collection that is still being paginated or iterated"
+            ),
+            (
+                "Bulk-delete operations are scoped by explicit build-ID, owner tag, or resource list, not "
+                "just resource type plus name prefix (for example ECS family-prefix deregistration, or "
+                "detaching an IAM managed policy from every attached role instead of only the intended ones)"
+            ),
+            "Ask: what is the worst-case set of resources this operation could touch, and is that acceptable?",
+        ],
+        file_hints=["**/*cleanup*.*", "**/*destroy*.*", "**/*teardown*.*", "**/*prune*.*"],
+        parent="aws",
+    ),
+    "aws-iam": Pack(
+        title="AWS IAM Pack",
+        practices=[
+            (
+                "IAM condition operators match intent: StringEquals/StringNotEquals treat * and ? as literal "
+                "characters, not wildcards — use StringLike/StringNotLike when wildcard matching is intended"
+            ),
+            (
+                "Managed policy attach/detach operations are scoped to the intended roles only, not applied "
+                "to every role currently attached"
+            ),
+            "Policies follow least privilege: no wildcard actions/resources without explicit, reviewed justification",
+        ],
+        file_hints=["**/*iam*.*", "**/*policy*.json", "**/*.tf"],
+        parent="aws",
+    ),
+    "gcp": Pack(
+        title="GCP Pack",
+        practices=[
+            (
+                "IAM bindings use least-privilege roles instead of broad predefined/basic roles where a "
+                "custom role suffices"
+            ),
+            "Resource deletion/cleanup is scoped by explicit labels or resource IDs, not name prefix alone",
+        ],
+        file_hints=["**/*.ts", "**/*.py", "**/*.js", "**/*.tf"],
+        parent="cloud",
+    ),
+    "azure": Pack(
+        title="Azure Pack",
+        practices=[
+            (
+                "RBAC role assignments use least-privilege built-in or custom roles scoped to the correct "
+                "resource group/subscription"
+            ),
+            "Resource deletion/cleanup is scoped by explicit resource ID or tag, not name prefix alone",
+        ],
+        file_hints=["**/*.ts", "**/*.py", "**/*.js", "**/*.bicep", "**/*.arm.json"],
+        parent="cloud",
+    ),
     "cdk": Pack(
         title="AWS CDK Pack",
         practices=[
@@ -179,6 +271,7 @@ SPECIALTY_PACKS: dict[str, Pack] = {
             "Token/intrinsic-aware policy validation",
         ],
         file_hints=["**/*.ts", "**/*.py", "cdk/**", "infra/**"],
+        parent="aws",
     ),
     "terraform": Pack(
         title="Terraform Pack",

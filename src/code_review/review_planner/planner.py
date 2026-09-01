@@ -297,16 +297,28 @@ def infer_specialty_ids(target: Path, specialties: dict[str, Pack]) -> list[str]
     return [item for item in ordered_unique(candidates) if item in specialties]
 
 
-def expand_specialty_hierarchy(selected_ids: list[str]) -> list[str]:
+def expand_specialty_hierarchy(selected_ids: list[str], specialties: dict[str, Pack]) -> list[str]:
+    """Expand selected specialty ids to include their full ancestor chain.
+
+    Walks Pack.parent recursively so a leaf like ``aws-iam`` (parent ``aws``,
+    whose parent is ``cloud``) automatically pulls in ``aws`` and ``cloud``.
+    """
     expanded: list[str] = []
-    child_to_parent = {
-        "ui-ux-cli-tui": "ui-ux",
-        "ui-ux-web": "ui-ux",
-    }
     for item in selected_ids:
-        parent = child_to_parent.get(item)
-        if parent and parent not in expanded:
-            expanded.append(parent)
+        ancestry: list[str] = []
+        current = item
+        seen = {current}
+        while True:
+            pack = specialties.get(current)
+            parent = pack.parent if pack is not None else None
+            if not parent or parent in seen or parent not in specialties:
+                break
+            ancestry.append(parent)
+            seen.add(parent)
+            current = parent
+        for ancestor in reversed(ancestry):
+            if ancestor not in expanded:
+                expanded.append(ancestor)
         if item not in expanded:
             expanded.append(item)
     return expanded
@@ -660,7 +672,7 @@ def build_plan(
         )
     if not selected_specialties_ids:
         selected_specialties_ids = infer_specialty_ids(target_path, specialties)
-    selected_specialties_ids = expand_specialty_hierarchy(selected_specialties_ids)
+    selected_specialties_ids = expand_specialty_hierarchy(selected_specialties_ids, specialties)
     selected_tools_ids = select_ids(
         kind="tools",
         catalog=tools,
