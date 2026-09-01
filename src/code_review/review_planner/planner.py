@@ -220,6 +220,60 @@ def infer_language_ids(target: Path, languages: dict[str, Pack]) -> list[str]:
     return [item[0] for item in sorted(counts.items(), key=lambda entry: (-entry[1], entry[0]))]
 
 
+def _detect_cloud_providers(target: Path) -> set[str]:
+    """Detect aws/gcp/azure usage from dependency manifests and IaC files.
+
+    Scoped to manifest and IaC file *content* (not arbitrary source files) to
+    keep detection fast and low-noise. Respects IGNORED_SCAN_DIRS.
+    """
+    providers: set[str] = set()
+
+    def _read_text(path: Path) -> str:
+        try:
+            return path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            return ""
+
+    manifest_names = ("package.json", "requirements.txt", "pyproject.toml", "Pipfile", "go.mod")
+    for manifest_name in manifest_names:
+        for manifest in target.rglob(manifest_name):
+            if _is_ignored_path(manifest, target):
+                continue
+            text = _read_text(manifest)
+            if (
+                "@aws-sdk/" in text
+                or "aws-sdk" in text
+                or "boto3" in text
+                or "botocore" in text
+                or "aws-sdk-go" in text
+            ):
+                providers.add("aws")
+            if "@google-cloud/" in text or "google-cloud-" in text or "cloud.google.com/go" in text:
+                providers.add("gcp")
+            if "@azure/" in text or "azure-mgmt-" in text or "azure-identity" in text or "azure-sdk-for-go" in text:
+                providers.add("azure")
+
+    for tf_file in target.rglob("*.tf"):
+        if _is_ignored_path(tf_file, target):
+            continue
+        text = _read_text(tf_file)
+        if 'provider "aws"' in text or "hashicorp/aws" in text:
+            providers.add("aws")
+        if 'provider "google"' in text or "hashicorp/google" in text:
+            providers.add("gcp")
+        if 'provider "azurerm"' in text or "hashicorp/azurerm" in text:
+            providers.add("azure")
+
+    if any(path.suffix == ".bicep" for path in target.rglob("*.bicep") if not _is_ignored_path(path, target)):
+        providers.add("azure")
+    if any(
+        path.name.endswith(".arm.json") for path in target.rglob("*.arm.json") if not _is_ignored_path(path, target)
+    ):
+        providers.add("azure")
+
+    return providers
+
+
 def infer_specialty_ids(target: Path, specialties: dict[str, Pack]) -> list[str]:
     if not target.exists() or not target.is_dir():
         return []
@@ -232,6 +286,10 @@ def infer_specialty_ids(target: Path, specialties: dict[str, Pack]) -> list[str]
         candidates.append("cdk")
     if any(path.suffix == ".tf" for path in target.rglob("*.tf") if not _is_ignored_path(path, target)):
         candidates.append("terraform")
+    detected_providers = _detect_cloud_providers(target)
+    for provider in ("aws", "gcp", "azure"):
+        if provider in detected_providers:
+            candidates.append(provider)
     if any(
         item.startswith(("k8s/", "helm/"))
         for item in paths

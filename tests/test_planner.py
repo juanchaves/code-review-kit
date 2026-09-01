@@ -97,6 +97,50 @@ def test_infer_specialty_ids_detects_ui_ux_files(tmp_path: Path) -> None:
     assert infer_specialty_ids(tmp_path, specialties) == ["ui-ux-cli-tui", "ui-ux-web", "ui-ux"]
 
 
+def test_infer_specialty_ids_detects_aws_from_package_json(tmp_path: Path) -> None:
+    (tmp_path / "package.json").write_text('{"dependencies": {"@aws-sdk/client-s3": "^3.0.0"}}', encoding="utf-8")
+
+    _, _, _, _, specialties, _ = _catalog()
+
+    assert "aws" in infer_specialty_ids(tmp_path, specialties)
+
+
+def test_infer_specialty_ids_detects_aws_from_python_requirements(tmp_path: Path) -> None:
+    (tmp_path / "requirements.txt").write_text("boto3==1.34.0\n", encoding="utf-8")
+
+    _, _, _, _, specialties, _ = _catalog()
+
+    assert "aws" in infer_specialty_ids(tmp_path, specialties)
+
+
+def test_infer_specialty_ids_detects_gcp_from_terraform_provider(tmp_path: Path) -> None:
+    (tmp_path / "main.tf").write_text('provider "google" {\n  project = "example"\n}\n', encoding="utf-8")
+
+    _, _, _, _, specialties, _ = _catalog()
+
+    assert "gcp" in infer_specialty_ids(tmp_path, specialties)
+
+
+def test_infer_specialty_ids_detects_azure_from_bicep_file(tmp_path: Path) -> None:
+    (tmp_path / "main.bicep").write_text(
+        "resource sa 'Microsoft.Storage/storageAccounts@2021-04-01' = {}\n", encoding="utf-8"
+    )
+
+    _, _, _, _, specialties, _ = _catalog()
+
+    assert "azure" in infer_specialty_ids(tmp_path, specialties)
+
+
+def test_infer_specialty_ids_ignores_cloud_sdk_signals_in_node_modules(tmp_path: Path) -> None:
+    ignored = tmp_path / "node_modules" / "@aws-sdk" / "client-s3"
+    ignored.mkdir(parents=True)
+    (ignored / "package.json").write_text('{"dependencies": {"@aws-sdk/client-s3": "^3.0.0"}}', encoding="utf-8")
+
+    _, _, _, _, specialties, _ = _catalog()
+
+    assert "aws" not in infer_specialty_ids(tmp_path, specialties)
+
+
 def test_catalog_cloud_hierarchy_reparents_cdk_under_aws() -> None:
     _, _, _, _, specialties, _ = _catalog()
 
