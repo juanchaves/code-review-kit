@@ -167,9 +167,13 @@ def _authoring_doc_paths(target: Path) -> list[Path]:
         if _is_ignored_path(path, target):
             continue
         rel = path.relative_to(target).as_posix()
-        if (
-            rel.startswith((".github/agents/", ".github/prompts/", ".github/instructions/"))
-        ) or path.name in {"README.md", "SKILL.md", "CLAUDE.md", "AGENTS.md", "GEMINI.md"}:
+        if (rel.startswith((".github/agents/", ".github/prompts/", ".github/instructions/"))) or path.name in {
+            "README.md",
+            "SKILL.md",
+            "CLAUDE.md",
+            "AGENTS.md",
+            "GEMINI.md",
+        }:
             paths.append(path)
     return paths
 

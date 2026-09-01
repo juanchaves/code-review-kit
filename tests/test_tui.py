@@ -165,9 +165,7 @@ def test_group_toggle_selects_all_items_in_same_pack() -> None:
         user_modified=wizard.baseline_practices_user_modified,
     )
     page = wizard._page_for_key("baseline_practices")
-    wizard.page_index = next(
-        index for index, item in enumerate(wizard.pages) if item.key == "baseline_practices"
-    )
+    wizard.page_index = next(index for index, item in enumerate(wizard.pages) if item.key == "baseline_practices")
     wizard.cursor_index = 0
     wizard._clear_current()
 
@@ -227,7 +225,9 @@ def test_select_all_on_personas_does_not_propagate_to_language_practices() -> No
         user_modified=wizard.language_practices_user_modified,
     )
     language_page = wizard._page_for_key("language_practices")
-    selected_language = [option for option in language_page.options if option.selected and option.id.startswith("language::")]
+    selected_language = [
+        option for option in language_page.options if option.selected and option.id.startswith("language::")
+    ]
     assert selected_language == []
 
 

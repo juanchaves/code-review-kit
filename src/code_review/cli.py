@@ -323,6 +323,14 @@ def build_parser() -> argparse.ArgumentParser:
                     "help": "After review, ask to comment on the active PR, publish a comment, generate a plan, or skip the action.",
                 },
             ),
+            (
+                "--harness",
+                {
+                    "choices": ["copilot", "claude-code", "opencode"],
+                    "default": None,
+                    "help": "AI harness for persona execution. Persisted in state; prompted interactively when not set.",
+                },
+            ),
         ],
     )
 
@@ -1211,6 +1219,37 @@ def _resolve_post_review_action(*, requested: str, active_pr: dict | None) -> st
     return "skip"
 
 
+_HARNESS_CHOICES = ["copilot", "claude-code", "opencode"]
+_HARNESS_LABELS = {"copilot": "GitHub Copilot", "claude-code": "Claude Code", "opencode": "OpenCode"}
+
+
+def _prompt_harness_selection() -> str:
+    print("\nChoose the AI harness for persona execution:")
+    for index, harness_id in enumerate(_HARNESS_CHOICES, 1):
+        print(f"  {index}. {_HARNESS_LABELS[harness_id]} ({harness_id})")
+    print("  Enter number or harness id (or press Enter to skip): ", end="", flush=True)
+    try:
+        raw = input().strip()
+    except (EOFError, KeyboardInterrupt):
+        return ""
+    if not raw:
+        return ""
+    if raw.isdigit():
+        index = int(raw) - 1
+        if 0 <= index < len(_HARNESS_CHOICES):
+            return _HARNESS_CHOICES[index]
+        return ""
+    return raw if raw in _HARNESS_CHOICES else ""
+
+
+def _save_review_harness(*, review_target: Path, harness: str, plan: dict, previous_state: dict) -> None:
+    state_path = default_state_path(target=review_target)
+    if not state_path.exists():
+        return
+    merged = {**previous_state, "harness": harness}
+    save_state(state_path=state_path, payload=merged)
+
+
 def _apply_review_wizard(
     *,
     args: argparse.Namespace,
@@ -1242,6 +1281,7 @@ def _apply_review_wizard(
             "language_practices": selections.get("language_practices", []),
             "specialties": selections["specialties"],
             "strategies": selections["strategies"],
+            "harness": selections.get("harness") or config.get("harness", ""),
         },
         _build_cli_inputs(args),
         True,
@@ -1503,19 +1543,24 @@ def _render_completion_summary(plan: dict, *, post_action: str) -> str:
     promotion = plan.get("learning_promotion", {}) if isinstance(plan.get("learning_promotion"), dict) else {}
     governance = plan.get("governance", {}) if isinstance(plan.get("governance"), dict) else {}
     persona_runs = plan.get("persona_runs", [])
+    harness = plan.get("harness") or ""
     if isinstance(persona_runs, list) and persona_runs:
         ran = sum(1 for item in persona_runs if isinstance(item, dict) and item.get("status") == "ran")
         skipped = sum(1 for item in persona_runs if isinstance(item, dict) and item.get("status") == "skipped")
         failed = sum(1 for item in persona_runs if isinstance(item, dict) and item.get("status") == "failed")
+        persona_line = f"Persona execution: ran {ran} · skipped {skipped} · failed {failed}"
     else:
-        ran = units_total
-        skipped = 0
-        failed = 0
+        if harness:
+            persona_line = f"Persona execution: plan ready · open in {harness} to run AI persona reviews"
+        else:
+            persona_line = (
+                "Persona execution: plan ready · set --harness (copilot|claude-code|opencode) to run AI reviews"
+            )
     lines = [
         "---- Complete ----",
         "",
         f"✔ Review finished · units: {units_total} · findings: {len(feedback_actions)} · blocking: {blocking}",
-        f"Persona execution: ran {ran} · skipped {skipped} · failed {failed}",
+        persona_line,
     ]
     if gate_failures:
         lines.append(f"✖ Deterministic gate failures: {gate_failures}")
@@ -1747,6 +1792,24 @@ def handle_review_command(args: argparse.Namespace) -> int:
         )
     config = merge_learned_extensions(config=config, target=review_target)
 
+    # Load previous state and inject harness + prior selections into config for wizard pre-population
+    previous_state = load_state(default_state_path(target=review_target))
+    if previous_state:
+        state_config = state_to_wizard_config(previous_state)
+        # Merge state selections into config only for keys not already set by config file
+        for key, value in state_config.items():
+            if key not in config:
+                config[key] = value
+
+    # Resolve harness: CLI flag > state.json > interactive prompt
+    harness: str = getattr(args, "harness", None) or ""
+    if not harness:
+        harness = previous_state.get("harness", "") or ""
+    if not harness and not args.wizard and sys.stdin.isatty() and sys.stdout.isatty():
+        harness = _prompt_harness_selection()
+    if harness:
+        config["harness"] = harness
+
     personas, baselines, tools, languages, specialties, strategies = build_dynamic_catalog(config)
     if args.list_catalog:
         print(to_catalog_markdown(personas, baselines, tools, languages, specialties, strategies))
@@ -1767,6 +1830,8 @@ def handle_review_command(args: argparse.Namespace) -> int:
         )
         if not accepted:
             return 130
+        # Re-resolve harness from wizard result
+        harness = str(config.get("harness", "") or "")
 
     plan = build_plan(
         target=str(review_target),
@@ -1789,6 +1854,8 @@ def handle_review_command(args: argparse.Namespace) -> int:
     plan["review_workflow"] = "pr-review" if str(getattr(args, "pr", "")).strip() else "dev-loop"
     if str(getattr(args, "pr", "")).strip():
         plan["review_pr_ref"] = str(args.pr).strip()
+    if harness:
+        plan["harness"] = harness
     plan = _run_review_effects(
         plan=plan,
         review_target=review_target,
@@ -1799,6 +1866,9 @@ def handle_review_command(args: argparse.Namespace) -> int:
         sandbox_fallback_plugin_id=getattr(args, "sandbox_fallback_plugin", "passthrough"),
         setup_approval_policy=getattr(args, "setup_tool_policy", None),
     )
+    # Persist harness to state so future review runs remember it
+    if harness:
+        _save_review_harness(review_target=review_target, harness=harness, plan=plan, previous_state=previous_state)
     plan = _attach_default_requirements_context(args=args, review_target=review_target, plan=plan)
     return _finalize_review_output(plan=plan, review_target=review_target, args=args)
 

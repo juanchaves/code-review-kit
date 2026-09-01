@@ -14,13 +14,17 @@ class GovernanceDecision:
 class GovernancePlugin(Protocol):
     id: str
 
-    def decide_pr_publish(self, *, requested_action: str, active_pr: dict | None, interactive: bool) -> GovernanceDecision: ...
+    def decide_pr_publish(
+        self, *, requested_action: str, active_pr: dict | None, interactive: bool
+    ) -> GovernanceDecision: ...
 
 
 class StrictHumanApprovalGovernance:
     id = "strict-human-approval"
 
-    def decide_pr_publish(self, *, requested_action: str, active_pr: dict | None, interactive: bool) -> GovernanceDecision:
+    def decide_pr_publish(
+        self, *, requested_action: str, active_pr: dict | None, interactive: bool
+    ) -> GovernanceDecision:
         if requested_action != "comment":
             return GovernanceDecision(
                 approved=True,
@@ -56,7 +60,9 @@ class StrictHumanApprovalGovernance:
 class LenientGovernance:
     id = "lenient"
 
-    def decide_pr_publish(self, *, requested_action: str, active_pr: dict | None, interactive: bool) -> GovernanceDecision:
+    def decide_pr_publish(
+        self, *, requested_action: str, active_pr: dict | None, interactive: bool
+    ) -> GovernanceDecision:
         if requested_action == "comment" and active_pr is None:
             return GovernanceDecision(
                 approved=False,

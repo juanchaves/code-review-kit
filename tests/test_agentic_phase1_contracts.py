@@ -19,7 +19,13 @@ def test_bdd_feedback_queue_contract(tmp_path: Path) -> None:
     # Given a review run with actionable feedback items
     plan = {
         "feedback_actions": [
-            {"id": "missing-language-pack", "priority": "P2", "title": "Missing language", "action": "Select language pack", "why": "coverage"},
+            {
+                "id": "missing-language-pack",
+                "priority": "P2",
+                "title": "Missing language",
+                "action": "Select language pack",
+                "why": "coverage",
+            },
         ]
     }
     update_feedback_state(target=tmp_path, plan=plan)
@@ -38,8 +44,20 @@ def test_bdd_approval_gated_learning_promotion_contract(tmp_path: Path) -> None:
     # Given feedback exists and only some items are explicitly accepted by a human
     plan = {
         "feedback_actions": [
-            {"id": "accepted-item", "priority": "P1", "title": "Accepted", "action": "Use provider-aware PR fallback", "why": "reliability"},
-            {"id": "not-accepted-item", "priority": "P2", "title": "Not accepted", "action": "Keep investigating", "why": "unclear"},
+            {
+                "id": "accepted-item",
+                "priority": "P1",
+                "title": "Accepted",
+                "action": "Use provider-aware PR fallback",
+                "why": "reliability",
+            },
+            {
+                "id": "not-accepted-item",
+                "priority": "P2",
+                "title": "Not accepted",
+                "action": "Keep investigating",
+                "why": "unclear",
+            },
         ]
     }
     update_feedback_state(target=tmp_path, plan=plan)
