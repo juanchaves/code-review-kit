@@ -43,7 +43,9 @@ def _extract_markdown_bullets(text: str) -> list[str]:
     for line in lines:
         lowered = line.lower().strip()
         if lowered.startswith("#"):
-            in_requirements_region = any(token in lowered for token in ("requirement", "acceptance", "behavior", "scope"))
+            in_requirements_region = any(
+                token in lowered for token in ("requirement", "acceptance", "behavior", "scope")
+            )
             continue
         candidate = ""
         if lowered.startswith(("- ", "* ", "+ ")):
@@ -88,7 +90,9 @@ def _provider_from_git_remote(target: Path) -> str | None:
     return None
 
 
-def _run_json_command(command: list[str], *, missing_tool_note: str, failed_note: str) -> tuple[dict | None, str | None]:
+def _run_json_command(
+    command: list[str], *, missing_tool_note: str, failed_note: str
+) -> tuple[dict | None, str | None]:
     try:
         completed = subprocess.run(
             command,

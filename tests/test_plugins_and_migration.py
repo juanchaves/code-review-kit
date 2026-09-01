@@ -49,7 +49,9 @@ def test_migrate_state_payload_rejects_conflicting_selection_keys() -> None:
 
 def test_load_state_applies_migration(tmp_path: Path) -> None:
     state_path = tmp_path / "state.json"
-    state_path.write_text(json.dumps({"selections": {"reviewer_personas": ["correctness"]}, "schema_version": 1}), encoding="utf-8")
+    state_path.write_text(
+        json.dumps({"selections": {"reviewer_personas": ["correctness"]}, "schema_version": 1}), encoding="utf-8"
+    )
     loaded = load_state(state_path)
     assert loaded["selections"]["personas"] == ["correctness"]
     assert loaded["schema_version"] == CURRENT_SCHEMA_VERSION
@@ -87,7 +89,9 @@ def test_finalize_review_output_blocks_publish_when_governance_denies(monkeypatc
         post_review_action="comment",
         governance_plugin="strict-human-approval",
     )
-    cli_module._finalize_review_output(plan={"feedback_actions": [], "tool_review_results": [], "units": []}, review_target=tmp_path, args=args)
+    cli_module._finalize_review_output(
+        plan={"feedback_actions": [], "tool_review_results": [], "units": []}, review_target=tmp_path, args=args
+    )
     output = capsys.readouterr().out
     assert "Publish blocked: explicit human approval required in interactive mode." in output
 
@@ -116,7 +120,9 @@ def test_run_review_effects_sets_execution_fallback(monkeypatch) -> None:
 
     registry = SimpleNamespace(
         plugins={"shell-local": FailingPlugin(), "fallback-plugin": FallbackPlugin()},
-        resolve=lambda plugin_id: {"shell-local": FailingPlugin(), "fallback-plugin": FallbackPlugin()}[plugin_id or "shell-local"],
+        resolve=lambda plugin_id: {"shell-local": FailingPlugin(), "fallback-plugin": FallbackPlugin()}[
+            plugin_id or "shell-local"
+        ],
     )
     monkeypatch.setattr(cli_module, "build_default_execution_registry", lambda **kwargs: registry)
 

@@ -719,7 +719,7 @@ def state_to_wizard_config(state: dict) -> dict:
     selections = state.get("selections", {})
     if not isinstance(selections, dict):
         return {}
-    config: dict[str, list[str]] = {}
+    config: dict[str, object] = {}
     for key in (
         "personas",
         "baselines",
@@ -733,6 +733,9 @@ def state_to_wizard_config(state: dict) -> dict:
         value = selections.get(key)
         if isinstance(value, list) and all(isinstance(item, str) for item in value):
             config[key] = value
+    harness = state.get("harness")
+    if isinstance(harness, str) and harness:
+        config["harness"] = harness
     return config
 
 

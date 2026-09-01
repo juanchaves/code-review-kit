@@ -7,9 +7,7 @@ from dataclasses import dataclass
 from .catalog import DEFAULT_BASELINES, DEFAULT_PERSONAS, DEFAULT_TOOLS, Pack, Persona, Strategy, ToolPack
 from .planner import expand_specialty_hierarchy, infer_tool_ids
 
-TOOL_APPROVAL_NOTE = (
-    "Allowing a tool also authorizes crk to install it when it is missing or not accessible."
-)
+TOOL_APPROVAL_NOTE = "Allowing a tool also authorizes crk to install it when it is missing or not accessible."
 
 
 @dataclass
@@ -29,6 +27,7 @@ class Page:
     subtitle: str
     options: list[Option]
     required: bool = False
+    single_select: bool = False
 
 
 def _table_lines(headers: list[str], rows: list[list[str]]) -> list[str]:
@@ -48,14 +47,12 @@ def _table_lines(headers: list[str], rows: list[list[str]]) -> list[str]:
     return lines
 
 
-def render_setup_summary_lines(*, plan: dict, tool_setup_results: list[dict], tool_setup_error: str | None) -> list[str]:
+def render_setup_summary_lines(
+    *, plan: dict, tool_setup_results: list[dict], tool_setup_error: str | None
+) -> list[str]:
     selections = plan.get("selections", {})
     setup_tool_policy = plan.get("setup_tool_policy", {})
-    approval_mode = (
-        str(setup_tool_policy.get("mode", "prompt"))
-        if isinstance(setup_tool_policy, dict)
-        else "prompt"
-    )
+    approval_mode = str(setup_tool_policy.get("mode", "prompt")) if isinstance(setup_tool_policy, dict) else "prompt"
     setup_rows = [
         ["Target", str(plan.get("target", ""))],
         ["Personas", ", ".join(selections.get("personas", [])) or "none"],
@@ -297,6 +294,13 @@ class ReviewWizard:
                 ],
             ),
             Page(
+                key="harness",
+                title="Choose AI harness",
+                subtitle="Select the AI agent that will execute the persona reviews (single-select).",
+                single_select=True,
+                options=self._build_harness_options(config),
+            ),
+            Page(
                 key="summary",
                 title="Review summary",
                 subtitle="Press S or Enter to start the code review.",
@@ -304,6 +308,18 @@ class ReviewWizard:
             ),
         ]
         return pages
+
+    def _build_harness_options(self, config: dict) -> list[Option]:
+        harness_choices = [
+            ("copilot", "GitHub Copilot"),
+            ("claude-code", "Claude Code"),
+            ("opencode", "OpenCode"),
+        ]
+        current = config.get("harness", "")
+        selected_id = current if isinstance(current, str) and current else ""
+        if not selected_id and harness_choices:
+            selected_id = harness_choices[0][0]
+        return [Option(h_id, label, h_id == selected_id) for h_id, label in harness_choices]
 
     def _page_for_key(self, key: str) -> Page:
         for page in self.pages:
@@ -475,17 +491,16 @@ class ReviewWizard:
         else:
             selected_ids = previous_selected
 
-        page.options = [
-            Option(tool_id, self.tools[tool_id].title, tool_id in selected_ids)
-            for tool_id in option_ids
-        ]
+        page.options = [Option(tool_id, self.tools[tool_id].title, tool_id in selected_ids) for tool_id in option_ids]
         mode = "showing all tools" if self.show_all_tools else "showing recommended tools"
         if recommended:
             page.subtitle = (
                 f"Language-informed tool menu ({mode}); press T to toggle all/recommended. {TOOL_APPROVAL_NOTE}"
             )
         else:
-            page.subtitle = f"No language-specific recommendation yet; showing all tools. Press T to toggle. {TOOL_APPROVAL_NOTE}"
+            page.subtitle = (
+                f"No language-specific recommendation yet; showing all tools. Press T to toggle. {TOOL_APPROVAL_NOTE}"
+            )
         self.cursor_index = min(self.cursor_index, max(0, len(page.options) - 1))
 
     def _sync_practice_page(
@@ -573,18 +588,23 @@ class ReviewWizard:
         return self._current_page().options
 
     def _selected_payload(self) -> dict:
-        payload: dict[str, list[str]] = {}
+        payload: dict[str, object] = {}
         for page in self.pages:
             if page.key == "summary":
                 continue
-            if self._is_grouped_practice_page(page.key):
+            if page.single_select:
+                selected = next((option.id for option in page.options if option.selected), None)
+                payload[page.key] = selected
+            elif self._is_grouped_practice_page(page.key):
                 payload[page.key] = [
                     option.id
                     for option in page.options
                     if option.selected and not option.is_group_header and self._parse_practice_id(option.id)
                 ]
             elif page.key == "specialties":
-                payload[page.key] = expand_specialty_hierarchy([option.id for option in page.options if option.selected])
+                payload[page.key] = expand_specialty_hierarchy(
+                    [option.id for option in page.options if option.selected]
+                )
             else:
                 payload[page.key] = [option.id for option in page.options if option.selected]
         payload["baselines"] = self._selected_pack_ids_from_practice_page(
@@ -669,6 +689,11 @@ class ReviewWizard:
         current = options[self.cursor_index]
         if current.is_group_header and self._is_grouped_practice_page(page.key):
             self._toggle_group_at_cursor()
+            return
+        if page.single_select:
+            for option in options:
+                option.selected = False
+            current.selected = True
             return
         current.selected = not current.selected
         self._refresh_group_headers(page)
@@ -781,7 +806,9 @@ class ReviewWizard:
                 )
             self._draw_options(stdscr, page, content_top, content_bottom, width)
             selected_count, total_count = self._selection_progress(page)
-            stdscr.addnstr(7 if page.key == "tools" else 6, 2, f"Selected: {selected_count}/{total_count}", width - 4, curses.A_DIM)
+            stdscr.addnstr(
+                7 if page.key == "tools" else 6, 2, f"Selected: {selected_count}/{total_count}", width - 4, curses.A_DIM
+            )
 
         footer = "q quit | Enter next/start | space toggle | a select all | n clear all | h/left back"
         if self._is_grouped_practice_page(page.key):
@@ -802,9 +829,7 @@ class ReviewWizard:
         for row, option in enumerate(page.options[self.scroll_offset : self.scroll_offset + visible_height]):
             screen_row = top + row
             if option.is_group_header:
-                group_items = [
-                    item for item in page.options if item.group == option.group and not item.is_group_header
-                ]
+                group_items = [item for item in page.options if item.group == option.group and not item.is_group_header]
                 selected_count = sum(1 for item in group_items if item.selected)
                 total = len(group_items)
                 if total > 0 and selected_count == total:
@@ -819,7 +844,9 @@ class ReviewWizard:
                 prefix = "[x]" if option.selected else "[ ]"
                 line = f"  {prefix} {option.title}"
                 base_style = curses.A_NORMAL
-            style = base_style | (curses.A_REVERSE if self.scroll_offset + row == self.cursor_index else curses.A_NORMAL)
+            style = base_style | (
+                curses.A_REVERSE if self.scroll_offset + row == self.cursor_index else curses.A_NORMAL
+            )
             stdscr.addnstr(screen_row, 2, line, width - 4, style)
 
         if not page.options:
