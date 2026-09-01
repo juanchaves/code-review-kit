@@ -96,6 +96,34 @@ def test_infer_specialty_ids_detects_ui_ux_files(tmp_path: Path) -> None:
     assert infer_specialty_ids(tmp_path, specialties) == ["ui-ux-cli-tui", "ui-ux-web", "ui-ux"]
 
 
+def test_infer_language_ids_ignores_single_incidental_shell_file(tmp_path: Path) -> None:
+    # A shell file under an ignored tool-config dir should not pull in the shell toolchain.
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "main.py").write_text("", encoding="utf-8")
+    (tmp_path / ".claude" / "hooks").mkdir(parents=True)
+    (tmp_path / ".claude" / "hooks" / "post-format.sh").write_text("", encoding="utf-8")
+
+    _, _, _, languages, _, _ = _catalog()
+
+    result = infer_language_ids(tmp_path, languages)
+    assert "shell" not in result
+    assert "python" in result
+
+
+def test_infer_language_ids_ignores_files_in_tool_config_dirs(tmp_path: Path) -> None:
+    # Files under .claude, .cursor, .copilot should not influence language detection.
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "app.py").write_text("", encoding="utf-8")
+    for tool_dir in (".claude", ".cursor", ".copilot"):
+        (tmp_path / tool_dir).mkdir()
+        (tmp_path / tool_dir / "hook.sh").write_text("", encoding="utf-8")
+
+    _, _, _, languages, _, _ = _catalog()
+
+    result = infer_language_ids(tmp_path, languages)
+    assert "shell" not in result
+
+
 def test_infer_specialty_ids_detects_harness_context_and_docs_quality(tmp_path: Path) -> None:
     (tmp_path / ".github" / "prompts").mkdir(parents=True)
     (tmp_path / ".github" / "prompts" / "agent.prompt.md").write_text("x", encoding="utf-8")
