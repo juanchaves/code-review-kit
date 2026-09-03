@@ -13,6 +13,7 @@ class ExecutionPlugin(Protocol):
         self,
         *,
         deterministic_gates: list[dict],
+        target: Path | None = None,
         interactive: bool | None = None,
         command_environment: dict[str, str] | None = None,
         approval_policy: dict | None = None,
@@ -44,6 +45,7 @@ class ShellExecutionPlugin:
         self,
         *,
         deterministic_gates: list[dict],
+        target: Path | None = None,
         interactive: bool | None = None,
         command_environment: dict[str, str] | None = None,
         approval_policy: dict | None = None,
@@ -51,6 +53,7 @@ class ShellExecutionPlugin:
         try:
             return self._run_selected_tool_setup(
                 deterministic_gates=deterministic_gates,
+                target=target,
                 interactive=interactive,
                 command_environment=command_environment,
                 approval_policy=approval_policy,

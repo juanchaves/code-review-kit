@@ -590,6 +590,34 @@ def test_run_selected_tool_setup_skips_install_when_already_installed(monkeypatc
     assert results[0]["steps"][0]["text"] == "already-installed"
 
 
+def test_run_selected_tool_setup_passes_target_as_cwd(monkeypatch, tmp_path: Path) -> None:
+    seen_cwd: list[Path | None] = []
+
+    def fake_run_shell(command: str, cwd: Path | None = None) -> SimpleNamespace:
+        seen_cwd.append(cwd)
+        return SimpleNamespace(returncode=0, stderr="", stdout="")
+
+    monkeypatch.setattr("code_review.review_planner.init._run_shell_command", fake_run_shell)
+    monkeypatch.setattr("code_review.review_planner.init.platform_label", lambda: "macOS")
+
+    results, error = run_selected_tool_setup(
+        target=tmp_path,
+        deterministic_gates=[
+            {
+                "id": "js-biome",
+                "title": "Biome",
+                "setup": ["npm i -D @biomejs/biome"],
+                "commands": ["npx @biomejs/biome --version"],
+            }
+        ],
+    )
+
+    assert error is None
+    assert results[0]["status"] == "passed"
+    # Verify probe must run in the target repo, not the process's own cwd
+    assert seen_cwd == [tmp_path]
+
+
 def test_tool_setup_feedback_reports_failed_gate() -> None:
     results = [
         {

@@ -708,6 +708,7 @@ def handle_install_or_init_command(args: argparse.Namespace) -> int:
             plan["sandbox"] = {"plugin": sandbox_session.id, "note": sandbox_session.note}
             tool_setup_results, tool_setup_error = run_selected_tool_setup(
                 deterministic_gates=plan.get("deterministic_gates", []),
+                target=target,
                 approval_policy=setup_tool_policy,
                 command_environment=sandbox_session.environment,
             )
@@ -721,6 +722,7 @@ def handle_install_or_init_command(args: argparse.Namespace) -> int:
                 plan["sandbox"] = {"plugin": sandbox_session.id, "note": sandbox_session.note}
                 tool_setup_results, tool_setup_error = run_selected_tool_setup(
                     deterministic_gates=plan.get("deterministic_gates", []),
+                    target=target,
                     approval_policy=setup_tool_policy,
                     command_environment=sandbox_session.environment,
                 )
@@ -1329,6 +1331,8 @@ def _run_review_effects(
             }
             if _callable_accepts_keyword(execution_plugin.run_setup, "approval_policy"):
                 run_setup_kwargs["approval_policy"] = setup_approval_policy
+            if _callable_accepts_keyword(execution_plugin.run_setup, "target"):
+                run_setup_kwargs["target"] = review_target
             try:
                 tool_setup_results, tool_setup_error = _invoke_with_optional_environment(
                     execution_plugin.run_setup,
@@ -1346,6 +1350,8 @@ def _run_review_effects(
                     }
                     if _callable_accepts_keyword(fallback_plugin.run_setup, "approval_policy"):
                         fallback_setup_kwargs["approval_policy"] = setup_approval_policy
+                    if _callable_accepts_keyword(fallback_plugin.run_setup, "target"):
+                        fallback_setup_kwargs["target"] = review_target
                     tool_setup_results, tool_setup_error = _invoke_with_optional_environment(
                         fallback_plugin.run_setup,
                         command_environment=command_environment,
