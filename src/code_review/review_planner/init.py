@@ -254,16 +254,18 @@ def _execute_setup_command(
     phase: str,
     tool_id: str,
     command_environment: dict[str, str] | None = None,
+    cwd: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
     if interactive and sys.stdin.isatty() and sys.stdout.isatty():
         return _run_shell_command_with_environment(
             command=command,
+            cwd=cwd,
             phase=phase,
             tool_id=tool_id,
             interactive=True,
             env=command_environment,
         )
-    return _run_shell_command_with_environment(command=command, interactive=False, env=command_environment)
+    return _run_shell_command_with_environment(command=command, cwd=cwd, interactive=False, env=command_environment)
 
 
 def _build_active_context(items: dict) -> list[dict]:
@@ -851,6 +853,7 @@ def _approve_setup_command(
 def _all_verify_commands_pass(
     commands: list[str],
     command_environment: dict[str, str] | None,
+    target: Path | None = None,
 ) -> bool:
     """Silently probe verification commands to check if a tool is already installed."""
     for command in commands:
@@ -858,6 +861,7 @@ def _all_verify_commands_pass(
             continue
         result = _run_shell_command_with_environment(
             command=command,
+            cwd=target,
             interactive=False,
             env=command_environment,
         )
@@ -869,6 +873,7 @@ def _all_verify_commands_pass(
 def run_selected_tool_setup(
     *,
     deterministic_gates: list[dict],
+    target: Path | None = None,
     approval_policy: dict | None = None,
     interactive: bool | None = None,
     command_environment: dict[str, str] | None = None,
@@ -887,7 +892,7 @@ def run_selected_tool_setup(
         gate_result = {"id": tool_id, "title": title, "steps": [], "status": "passed"}
 
         verify_commands = [c for c in gate.get("commands", []) if isinstance(c, str)]
-        if gate.get("setup") and _all_verify_commands_pass(verify_commands, command_environment):
+        if gate.get("setup") and _all_verify_commands_pass(verify_commands, command_environment, target):
             gate_result["steps"].append({"kind": "verify", "text": "already-installed", "status": "passed"})
             results.append(gate_result)
             continue
@@ -922,6 +927,7 @@ def run_selected_tool_setup(
                 phase="install",
                 tool_id=tool_id,
                 command_environment=command_environment,
+                cwd=target,
             )
             step_result = {
                 "kind": "setup",
@@ -956,6 +962,7 @@ def run_selected_tool_setup(
                 phase="setup",
                 tool_id=tool_id,
                 command_environment=command_environment,
+                cwd=target,
             )
             step_result = {
                 "kind": "verify",
